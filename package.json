@@ -69,6 +69,8 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --import tsx --test \"test/unit/**/*.test.ts\"",
+    "pretest:integration": "npm run build",
+    "test:integration": "vscode-test",
     "test": "npm run typecheck && npm run test:unit"
   },
   "dependencies": {
