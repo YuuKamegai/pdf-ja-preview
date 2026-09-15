@@ -18,7 +18,10 @@ export interface Block {
   hash: string;
   /** 原文の開始行（0 始まり） */
   lineStart: number;
-  /** 原文の終端行（終端排他） */
+  /**
+   * 原文の終端行（終端排他）。ブロック本体の末尾であり、リストの直後の空行は含まない。
+   * markdown-it の list トークンの map は後続の空行を 1 行飲み込むが、ここでは採用しない。
+   */
   lineEnd: number;
 }
 
@@ -87,6 +90,8 @@ export function splitBlocks(
 
     let line = entry.lineStart;
     for (const piece of pieces) {
+      // token.map ではなく本体の行数から求める。list トークンの map は後続の空行を
+      // 含むため、そのまま使うとブロックの行範囲が実体より 1 行長くなる。
       const lineEnd = line + piece.split('\n').length;
       blocks.push(makeBlock(blocks.length, entry.kind, piece, line, lineEnd));
       line = lineEnd;

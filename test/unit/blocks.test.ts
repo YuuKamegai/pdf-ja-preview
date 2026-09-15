@@ -89,3 +89,26 @@ test('上限以下のリストと、上限を超えた表は分割されない',
   const table = '| a | b |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |\n';
   assert.equal(splitBlocks(table, 10).length, 1, '表は上限を超えても割らない');
 });
+
+test('リストの後ろに別のブロックが続いても、lineEnd はリスト本体の末尾で止まる', () => {
+  const blocks = splitBlocks('- a\n- b\n\n# next\n');
+  assert.deepEqual(
+    blocks.map((b) => [b.kind, b.source, b.lineStart, b.lineEnd]),
+    [
+      ['list', '- a\n- b', 0, 2],
+      ['heading', '# next', 3, 4],
+    ],
+  );
+});
+
+test('分割されたリストの後ろにブロックが続く場合も、最後の断片が本体の末尾で止まる', () => {
+  const blocks = splitBlocks(
+    [listItem(1), listItem(2), listItem(3)].join('\n') + '\n\n# next\n',
+    60,
+  );
+  const lists = blocks.filter((b) => b.kind === 'list');
+  assert.ok(lists.length > 1, 'リストが分割されること');
+  assert.equal(lists[lists.length - 1].lineEnd, 3);
+  assert.equal(blocks[blocks.length - 1].kind, 'heading');
+  assert.equal(blocks[blocks.length - 1].lineStart, 4);
+});
