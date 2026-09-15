@@ -1,6 +1,8 @@
 import * as assert from 'node:assert/strict';
+import { copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { SessionEvent } from '../../src/session';
@@ -39,8 +41,19 @@ async function waitFor(predicate: () => boolean, timeoutMs = 20000): Promise<voi
 
 suite('md-ja-preview 統合', () => {
   let events: SessionEvent[];
+  let workDir: string;
+  let sample: string;
 
   suiteSetup(async () => {
+    // 保存のテストが原文を書き換える。フィクスチャ本体ではなく複製を開き、
+    // 実行を繰り返しても同じ結果になるようにする。
+    workDir = await mkdtemp(path.join(tmpdir(), 'md-ja-preview-integration-'));
+    sample = path.join(workDir, 'sample.md');
+    await copyFile(
+      path.join(__dirname, '..', '..', '..', 'test', 'fixtures', 'sample.md'),
+      sample,
+    );
+
     const endpoint = await startStub();
     const settings = vscode.workspace.getConfiguration('mdJaPreview');
     await settings.update('endpoint', endpoint, vscode.ConfigurationTarget.Global);
@@ -53,8 +66,9 @@ suite('md-ja-preview 統合', () => {
     events = ((await extension.activate()) as { events: SessionEvent[] }).events;
   });
 
-  suiteTeardown(() => {
+  suiteTeardown(async () => {
     server.close();
+    await rm(workDir, { recursive: true, force: true });
   });
 
   setup(() => {
@@ -63,8 +77,7 @@ suite('md-ja-preview 統合', () => {
   });
 
   test('パネルを開くと翻訳対象ブロックだけが逐次翻訳される', async () => {
-    const fixture = path.join(__dirname, '..', '..', '..', 'test', 'fixtures', 'sample.md');
-    const document = await vscode.workspace.openTextDocument(fixture);
+    const document = await vscode.workspace.openTextDocument(sample);
     await vscode.window.showTextDocument(document);
     await vscode.commands.executeCommand('mdJaPreview.open');
 

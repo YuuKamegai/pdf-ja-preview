@@ -1,6 +1,6 @@
 # Getting Started
 
-Install it now.
+Install the package first.
 
 ```bash
 npm install sample
