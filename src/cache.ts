@@ -9,6 +9,8 @@ interface CacheEntry {
   at: number;
 }
 
+type WriteFile = (path: string, data: string, encoding: 'utf8') => Promise<void>;
+
 export function cacheKey(model: string, source: string): string {
   // モデル名の長さを前置きする。区切り文字だけで連結すると、モデル名に区切り文字が
   // 含まれたとき別の (model, source) が同じハッシュ入力になりうる。
@@ -21,17 +23,19 @@ export function cacheKey(model: string, source: string): string {
 
 export class TranslationCache {
   private dirty = false;
+  private mutationVersion = 0;
   private writing: Promise<void> = Promise.resolve();
 
   private constructor(
     private readonly filePath: string,
     private readonly entries: Map<string, CacheEntry>,
     private readonly now: () => number,
+    private readonly writeFile: WriteFile,
   ) {}
 
   static async load(
     filePath: string,
-    options: { now?: () => number; maxAgeMs?: number } = {},
+    options: { now?: () => number; maxAgeMs?: number; writeFile?: WriteFile } = {},
   ): Promise<TranslationCache> {
     const now = options.now ?? Date.now;
     const maxAgeMs = options.maxAgeMs ?? NINETY_DAYS;
@@ -48,7 +52,7 @@ export class TranslationCache {
       // ファイルが無い、あるいは壊れている場合は空で開く。
     }
 
-    return new TranslationCache(filePath, entries, now);
+    return new TranslationCache(filePath, entries, now, options.writeFile ?? writeFile);
   }
 
   get size(): number {
@@ -61,6 +65,7 @@ export class TranslationCache {
 
   set(model: string, source: string, ja: string): void {
     this.entries.set(cacheKey(model, source), { ja, at: this.now() });
+    this.mutationVersion++;
     this.dirty = true;
   }
 
@@ -77,8 +82,12 @@ export class TranslationCache {
 
   private async write(): Promise<void> {
     if (!this.dirty) return;
+    const version = this.mutationVersion;
+    const snapshot = JSON.stringify(Object.fromEntries(this.entries));
     await mkdir(dirname(this.filePath), { recursive: true });
-    await writeFile(this.filePath, JSON.stringify(Object.fromEntries(this.entries)), 'utf8');
-    this.dirty = false;
+    await this.writeFile(this.filePath, snapshot, 'utf8');
+    // 書き込み待ち中に set() された場合、その更新はこの snapshot に含まれない。
+    // dirty を残して、直列キュー上の次の flush に最新 snapshot を保存させる。
+    if (this.mutationVersion === version) this.dirty = false;
   }
 }
