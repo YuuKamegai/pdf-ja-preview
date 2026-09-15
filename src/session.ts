@@ -1,4 +1,5 @@
 import { splitBlocks, TRANSLATABLE_KINDS, type Block } from './markdown/blocks';
+import { reconcile } from './markdown/reconcile';
 import { matchesStructure } from './markdown/verify';
 import type { BlockState } from './panel/html';
 import {
@@ -43,6 +44,7 @@ function fatalBanner(error: unknown): string | undefined {
 export class TranslationSession {
   protected blockList: Block[] = [];
   protected translations = new Map<number, string>();
+  private generation = 0;
 
   constructor(protected readonly deps: SessionDeps) {}
 
@@ -51,6 +53,7 @@ export class TranslationSession {
   }
 
   async open(text: string): Promise<void> {
+    const generation = ++this.generation;
     this.blockList = splitBlocks(text, this.deps.maxBlockChars);
     this.translations = new Map();
     this.deps.emit({ kind: 'banner', text: '' });
@@ -64,15 +67,48 @@ export class TranslationSession {
         lineEnd: block.lineEnd,
       })),
     });
-    await this.run(this.blockList.map((block) => block.index));
+    await this.run(this.blockList.map((block) => block.index), generation);
+  }
+
+  /** 保存時に呼ぶ。内容が変わったブロックだけを訳し直す。 */
+  async update(text: string): Promise<void> {
+    const generation = ++this.generation;
+    const newBlocks = splitBlocks(text, this.deps.maxBlockChars);
+    const { carried, pending } = reconcile(this.blockList, this.translations, newBlocks);
+
+    this.blockList = newBlocks;
+    this.translations = new Map(carried);
+
+    this.deps.emit({ kind: 'banner', text: '' });
+    this.deps.emit({
+      kind: 'init',
+      blocks: newBlocks.map((block) => {
+        const ja = carried.get(block.index);
+        return {
+          index: block.index,
+          markdown: ja ?? block.source,
+          state: (ja !== undefined ? 'translated' : 'source') as BlockState,
+          lineStart: block.lineStart,
+          lineEnd: block.lineEnd,
+        };
+      }),
+    });
+
+    await this.run(pending, generation);
   }
 
   async retry(index: number): Promise<void> {
-    await this.run([index]);
+    await this.run([index], this.generation);
   }
 
-  protected async run(indices: readonly number[]): Promise<void> {
+  /** パネル破棄後に、遅れて完了した翻訳結果と後続処理を無効化する。 */
+  dispose(): void {
+    this.generation++;
+  }
+
+  protected async run(indices: readonly number[], generation: number): Promise<void> {
     for (const index of indices) {
+      if (generation !== this.generation) return;
       const block = this.blockList[index];
       if (!block) continue;
 
@@ -87,13 +123,13 @@ export class TranslationSession {
         continue;
       }
 
-      const keepGoing = await this.translateOne(block);
+      const keepGoing = await this.translateOne(block, generation);
       if (!keepGoing) return;
     }
   }
 
   /** 翻訳を 1 ブロック実行する。false を返したら以降のブロックへ進まない。 */
-  private async translateOne(block: Block): Promise<boolean> {
+  private async translateOne(block: Block, generation: number): Promise<boolean> {
     this.deps.emit({
       kind: 'block',
       index: block.index,
@@ -106,6 +142,8 @@ export class TranslationSession {
         this.deps.translate(block.source, this.headingContextFor(block.index), signal),
       );
 
+      if (generation !== this.generation) return false;
+
       if (!matchesStructure(block.source, ja)) {
         // プロンプト遵守を信用しない。構造が壊れた訳は採用せず原文を残す。
         this.emitBlock(block.index, block.source, 'error');
@@ -116,6 +154,7 @@ export class TranslationSession {
       this.publish(block.index, ja, 'translated');
       return true;
     } catch (error) {
+      if (generation !== this.generation) return false;
       if ((error as { name?: string } | null)?.name === 'AbortError') return false;
 
       const banner = fatalBanner(error);

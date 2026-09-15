@@ -86,3 +86,32 @@ test('cancelAll の後に投入したジョブは通常どおり実行される'
   queue.cancelAll();
   assert.equal(await queue.enqueue(async () => 'fresh'), 'fresh');
 });
+
+test('cancelAll 後の新しいジョブも中断中ジョブの収束を待ち、並列度 1 を守る', async () => {
+  const queue = new SequentialQueue();
+  let release!: () => void;
+  const settling = new Promise<void>((resolve) => { release = resolve; });
+  let active = 0;
+  let maxActive = 0;
+
+  const old = queue.enqueue(async () => {
+    active++;
+    maxActive = Math.max(maxActive, active);
+    await settling;
+    active--;
+  });
+  await tick();
+
+  queue.cancelAll();
+  const fresh = queue.enqueue(async () => {
+    active++;
+    maxActive = Math.max(maxActive, active);
+    active--;
+  });
+  await tick();
+  assert.equal(maxActive, 1, '旧ジョブが収束する前に新ジョブを始めないこと');
+
+  release();
+  await Promise.all([old, fresh]);
+  assert.equal(maxActive, 1);
+});

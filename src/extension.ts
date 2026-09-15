@@ -89,6 +89,7 @@ async function open(context: vscode.ExtensionContext, events: SessionEvent[]): P
 
   panel.onDispose(() => {
     owned.disposed = true;
+    owned.session?.dispose();
     queue.cancelAll();
     void cachePromise?.then((cache) => cache.flush()).catch(() => undefined);
     if (live === owned) live = undefined;
@@ -122,6 +123,26 @@ async function open(context: vscode.ExtensionContext, events: SessionEvent[]): P
       void session.retry(message.index);
     }
   });
+
+  const saveListener = vscode.workspace.onDidSaveTextDocument((saved) => {
+    if (
+      live !== owned ||
+      owned.disposed ||
+      saved.uri.toString() !== document.uri.toString()
+    ) return;
+
+    queue.cancelAll();
+    void session
+      .update(saved.getText())
+      .then(() => cache.flush())
+      .catch((error: unknown) => {
+        if (live !== owned || owned.disposed) return;
+        const detail = error instanceof Error ? error.message : String(error);
+        void vscode.window.showErrorMessage(`保存後の再翻訳に失敗しました: ${detail}`);
+      });
+  });
+  context.subscriptions.push(saveListener);
+  panel.onDispose(() => saveListener.dispose());
 
   await session.open(document.getText());
   if (live !== owned || owned.disposed) return;

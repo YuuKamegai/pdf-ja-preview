@@ -24,6 +24,5 @@ export class SequentialQueue {
   cancelAll(): void {
     this.controller.abort(new DOMException('cancelled', 'AbortError'));
     this.controller = new AbortController();
-    this.tail = Promise.resolve();
   }
 }

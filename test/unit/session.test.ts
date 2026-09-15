@@ -5,6 +5,7 @@ import {
   OllamaModelMissingError,
   OllamaUnavailableError,
 } from '../../src/translate/ollama';
+import { SequentialQueue } from '../../src/translate/queue';
 
 interface Harness {
   session: TranslationSession;
@@ -196,4 +197,101 @@ test('open のたびにバナーを消す', async () => {
   const h = harness(async (s) => `JA:${s}`);
   await h.session.open('Alpha.\n');
   assert.equal(h.events.some((e) => e.kind === 'banner' && e.text === ''), true);
+});
+
+test('保存時に変わったブロックだけ翻訳し直す', async () => {
+  const h = harness(async (s) => `JA:${s}`);
+  await h.session.open('# Title\n\nAlpha.\n\nBravo.\n');
+
+  h.calls.length = 0;
+  h.events.length = 0;
+  await h.session.update('# Title\n\nAlpha edited.\n\nBravo.\n');
+
+  assert.deepEqual(h.calls, ['Alpha edited.'], '変わった 1 ブロックだけ呼ぶ');
+});
+
+test('保存時の init は持ち越した訳を translated のまま出す', async () => {
+  const h = harness(async (s) => `JA:${s}`);
+  await h.session.open('# Title\n\nAlpha.\n');
+
+  h.events.length = 0;
+  await h.session.update('# Title\n\nAlpha.\n\nBravo.\n');
+
+  const init = initEvent(h.events);
+  assert.ok(init, 'init イベントが出ること');
+  assert.deepEqual(
+    init.blocks.map((b) => [b.markdown, b.state]),
+    [
+      ['JA:# Title', 'translated'],
+      ['JA:Alpha.', 'translated'],
+      ['Bravo.', 'source'],
+    ],
+  );
+});
+
+test('保存で行が増えても持ち越した訳の行範囲が更新される', async () => {
+  const h = harness(async (s) => `JA:${s}`);
+  await h.session.open('Alpha.\n');
+
+  h.events.length = 0;
+  await h.session.update('Intro.\n\nAlpha.\n');
+
+  const init = initEvent(h.events);
+  assert.ok(init, 'init イベントが出ること');
+  assert.equal(init.blocks[1]?.markdown, 'JA:Alpha.');
+  assert.equal(init.blocks[1]?.lineStart, 2);
+});
+
+test('保存後に旧翻訳が abort を無視して完了しても新しいブロックを上書きしない', async () => {
+  const queue = new SequentialQueue();
+  let resolveOld!: (value: string) => void;
+  const oldTranslation = new Promise<string>((resolve) => { resolveOld = resolve; });
+  const h = harness(async (source) =>
+    source === 'Old first.' ? oldTranslation : `JA:${source}`,
+    { enqueue: (job) => queue.enqueue(job) },
+  );
+
+  const opening = h.session.open('Old first.\n\nOld second.\n');
+  await new Promise((resolve) => setImmediate(resolve));
+  queue.cancelAll();
+  const updating = h.session.update('New.\n');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(h.calls, ['Old first.'], '旧翻訳の収束前に新翻訳を重ねないこと');
+  resolveOld('JA:Old.');
+  await Promise.all([opening, updating]);
+
+  const finalEvents = blockEvents(h.events).filter((event) => event.state === 'translated');
+  assert.deepEqual(finalEvents.map((event) => event.markdown), ['JA:New.']);
+  assert.deepEqual(h.calls, ['Old first.', 'New.'], '旧 run の次 index を新 blockList で処理しないこと');
+  assert.equal(h.cache.has('test-model\nOld first.'), false, 'stale 訳を cache にも採用しないこと');
+});
+
+test('保存後に旧翻訳が abort を無視して失敗しても新しい表示へ error を出さない', async () => {
+  let rejectOld!: (error: Error) => void;
+  const oldTranslation = new Promise<string>((_resolve, reject) => { rejectOld = reject; });
+  const h = harness(async (source) => source === 'Old.' ? oldTranslation : `JA:${source}`);
+
+  const opening = h.session.open('Old.\n');
+  await new Promise((resolve) => setImmediate(resolve));
+  await h.session.update('New.\n');
+  rejectOld(new Error('late failure'));
+  await opening;
+
+  const final = blockEvents(h.events).filter((event) => event.state !== 'translating');
+  assert.deepEqual(final.map((event) => [event.markdown, event.state]), [['JA:New.', 'translated']]);
+});
+
+test('dispose 後に遅い翻訳が完了しても cache 更新や後続翻訳をしない', async () => {
+  let resolveOld!: (value: string) => void;
+  const oldTranslation = new Promise<string>((resolve) => { resolveOld = resolve; });
+  const h = harness(async (source) => source === 'Old first.' ? oldTranslation : `JA:${source}`);
+
+  const opening = h.session.open('Old first.\n\nOld second.\n');
+  await new Promise((resolve) => setImmediate(resolve));
+  h.session.dispose();
+  resolveOld('JA:Old first.');
+  await opening;
+
+  assert.deepEqual(h.calls, ['Old first.']);
+  assert.equal(h.cache.size, 0);
 });

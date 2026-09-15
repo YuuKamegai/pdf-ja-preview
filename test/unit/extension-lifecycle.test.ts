@@ -9,12 +9,14 @@ import * as esbuild from 'esbuild';
 interface Harness {
   commands: Map<string, () => unknown>;
   editorListeners: Array<(editor: unknown) => unknown>;
+  saveListeners: Array<{ handler(document: any): void; disposed: boolean }>;
   panels: FakePanel[];
   loads: Array<{ resolve(): void }>;
   sessions: FakeSession[];
   caches: Array<{ flushes: number }>;
   config: Record<string, unknown>;
-  activeTextEditor?: { document: { languageId: string; fileName: string; getText(): string } };
+  errors: string[];
+  activeTextEditor?: { document: { languageId: string; fileName: string; uri: { toString(): string }; getText(): string } };
 }
 
 class FakePanel {
@@ -36,6 +38,9 @@ class FakePanel {
 
 class FakeSession {
   opens: string[] = [];
+  updates: string[] = [];
+  updateError?: Error;
+  disposed = false;
   constructor(private readonly deps: { emit(event: unknown): void }) {
     harness.sessions.push(this);
   }
@@ -44,6 +49,11 @@ class FakeSession {
     this.deps.emit({ kind: 'init', blocks: [] });
   }
   async retry(): Promise<void> {}
+  dispose(): void { this.disposed = true; }
+  async update(text: string): Promise<void> {
+    this.updates.push(text);
+    if (this.updateError) throw this.updateError;
+  }
   emit(event: unknown): void { this.deps.emit(event); }
 }
 
@@ -82,8 +92,8 @@ after(async () => { await rm(outputDir, { recursive: true, force: true }); });
 beforeEach(() => {
   extension?.deactivate();
   harness = {
-    commands: new Map(), editorListeners: [], panels: [], loads: [], sessions: [], caches: [], config: {},
-    activeTextEditor: { document: { languageId: 'markdown', fileName: 'a.md', getText: () => '# A' } },
+    commands: new Map(), editorListeners: [], saveListeners: [], panels: [], loads: [], sessions: [], caches: [], config: {}, errors: [],
+    activeTextEditor: { document: { languageId: 'markdown', fileName: 'a.md', uri: { toString: () => 'file:///a.md' }, getText: () => '# A' } },
   };
   (globalThis as any).__mdJaHarness = harness;
 });
@@ -95,8 +105,16 @@ const mocks: Record<string, string> = {
       get activeTextEditor() { return globalThis.__mdJaHarness.activeTextEditor; },
       onDidChangeActiveTextEditor(fn) { globalThis.__mdJaHarness.editorListeners.push(fn); return {}; },
       showWarningMessage() {},
+      showErrorMessage(message) { globalThis.__mdJaHarness.errors.push(message); },
     },
-    workspace: { getConfiguration() { return { get(k) { return globalThis.__mdJaHarness.config[k]; } }; } },
+    workspace: {
+      getConfiguration() { return { get(k) { return globalThis.__mdJaHarness.config[k]; } }; },
+      onDidSaveTextDocument(handler) {
+        const listener = { handler, disposed: false };
+        globalThis.__mdJaHarness.saveListeners.push(listener);
+        return { dispose() { listener.disposed = true; } };
+      },
+    },
     Uri: { joinPath(base, name) { return { fsPath: base.fsPath + '/' + name }; } },
   };`,
   cache: `exports.TranslationCache = class {
@@ -169,4 +187,43 @@ test('autoOpen=true なら Markdown editor の activation で open する', asyn
   harness.editorListeners[0](harness.activeTextEditor);
   await tick();
   assert.equal(harness.panels.length, 1);
+});
+
+test('対象 Markdown の保存だけを live session の update と cache flush へ配線する', async () => {
+  extension.activate(context());
+  const running = harness.commands.get('mdJaPreview.open')!();
+  harness.loads[0].resolve();
+  await running;
+  const flushesBefore = harness.caches[0].flushes;
+
+  harness.saveListeners[0].handler({ uri: { toString: () => 'file:///other.md' }, getText: () => 'Other' });
+  harness.saveListeners[0].handler({ uri: { toString: () => 'file:///a.md' }, getText: () => '# Updated' });
+  await tick();
+
+  assert.deepEqual(harness.sessions[0].updates, ['# Updated']);
+  assert.equal(harness.caches[0].flushes, flushesBefore + 1);
+});
+
+test('panel dispose で保存 listener を解除する', async () => {
+  extension.activate(context());
+  const running = harness.commands.get('mdJaPreview.open')!();
+  harness.loads[0].resolve();
+  await running;
+  assert.equal(harness.saveListeners[0].disposed, false);
+  harness.panels[0].dispose();
+  assert.equal(harness.saveListeners[0].disposed, true);
+  assert.equal(harness.sessions[0].disposed, true);
+});
+
+test('保存時 update の失敗を unhandled rejection にせず通知する', async () => {
+  extension.activate(context());
+  const running = harness.commands.get('mdJaPreview.open')!();
+  harness.loads[0].resolve();
+  await running;
+  harness.sessions[0].updateError = new Error('save failed');
+
+  harness.saveListeners[0].handler({ uri: { toString: () => 'file:///a.md' }, getText: () => '# Broken' });
+  await tick();
+  assert.equal(harness.errors.length, 1);
+  assert.match(harness.errors[0], /save failed/);
 });
