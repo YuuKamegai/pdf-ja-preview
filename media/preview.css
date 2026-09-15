@@ -1,0 +1,74 @@
+body {
+  margin: 0;
+  padding: 1.2rem 1.6rem 6rem;
+  font-family: var(--vscode-editor-font-family, system-ui), sans-serif;
+  font-size: var(--vscode-editor-font-size, 14px);
+  line-height: 1.8;
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+}
+
+#banner {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: -1.2rem -1.6rem 1rem;
+  padding: 0.6rem 1.6rem;
+  color: var(--vscode-inputValidation-errorForeground, inherit);
+  background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+  border-bottom: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+}
+
+.block {
+  position: relative;
+  scroll-margin-top: 3rem;
+}
+
+.block.state-source {
+  opacity: 0.45;
+}
+
+.block.state-translating {
+  opacity: 0.45;
+  border-left: 2px solid var(--vscode-progressBar-background, #0e70c0);
+  padding-left: 0.6rem;
+  margin-left: -0.8rem;
+}
+
+.block.state-error {
+  border-left: 2px solid var(--vscode-inputValidation-errorBorder, #be1100);
+  padding-left: 0.6rem;
+  margin-left: -0.8rem;
+}
+
+.retry {
+  margin: 0.2rem 0 0.8rem;
+  padding: 0.1rem 0.6rem;
+  font: inherit;
+  font-size: 0.85em;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+pre {
+  padding: 0.6rem 0.8rem;
+  overflow-x: auto;
+  background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1));
+}
+
+code {
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.4));
+}

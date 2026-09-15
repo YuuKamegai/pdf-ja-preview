@@ -1,0 +1,89 @@
+{
+  "name": "md-ja-preview",
+  "displayName": "md-ja Preview",
+  "description": "ローカル Ollama で英語 Markdown を日本語へ逐次翻訳して表示する",
+  "version": "0.1.0",
+  "publisher": "local",
+  "private": true,
+  "license": "MIT",
+  "engines": { "vscode": "^1.137.0" },
+  "categories": ["Other"],
+  "main": "./dist/extension.js",
+  "activationEvents": ["onCommand:mdJaPreview.open", "onLanguage:markdown"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "mdJaPreview.open",
+        "title": "日本語プレビューを開く",
+        "category": "md-ja"
+      }
+    ],
+    "configuration": {
+      "title": "md-ja Preview",
+      "properties": {
+        "mdJaPreview.endpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434",
+          "description": "Ollama のベース URL。"
+        },
+        "mdJaPreview.model": {
+          "type": "string",
+          "default": "qwen3.5:9b-q4_K_M",
+          "description": "翻訳に使う Ollama のモデル名。"
+        },
+        "mdJaPreview.think": {
+          "type": "boolean",
+          "default": false,
+          "description": "thinking を有効にする。有効にすると推論文が訳文へ混ざることがある。"
+        },
+        "mdJaPreview.temperature": {
+          "type": "number",
+          "default": 0.2,
+          "description": "生成温度。"
+        },
+        "mdJaPreview.requestTimeoutMs": {
+          "type": "number",
+          "default": 120000,
+          "description": "1 ブロックあたりのタイムアウト（ミリ秒）。"
+        },
+        "mdJaPreview.maxBlockChars": {
+          "type": "number",
+          "default": 1500,
+          "description": "この文字数を超えるリストを項目単位で分割する。"
+        },
+        "mdJaPreview.scrollSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "原文エディタと訳文パネルのスクロールを同期する。"
+        },
+        "mdJaPreview.autoOpen": {
+          "type": "boolean",
+          "default": false,
+          "description": "Markdown を開いたとき自動で日本語プレビューを開く。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --import tsx --test \"test/unit/**/*.test.ts\"",
+    "pretest:integration": "npm run build",
+    "test:integration": "vscode-test",
+    "test": "npm run typecheck && npm run test:unit"
+  },
+  "dependencies": {
+    "markdown-it": "^14.3.2"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.2.0",
+    "@types/node": "^24.13.4",
+    "@types/vscode": "^1.137.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.25.12",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}
