@@ -16,7 +16,52 @@
         "title": "日本語プレビューを開く",
         "category": "md-ja"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "md-ja Preview",
+      "properties": {
+        "mdJaPreview.endpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434",
+          "description": "Ollama のベース URL。"
+        },
+        "mdJaPreview.model": {
+          "type": "string",
+          "default": "qwen3.5:9b-q4_K_M",
+          "description": "翻訳に使う Ollama のモデル名。"
+        },
+        "mdJaPreview.think": {
+          "type": "boolean",
+          "default": false,
+          "description": "thinking を有効にする。有効にすると推論文が訳文へ混ざることがある。"
+        },
+        "mdJaPreview.temperature": {
+          "type": "number",
+          "default": 0.2,
+          "description": "生成温度。"
+        },
+        "mdJaPreview.requestTimeoutMs": {
+          "type": "number",
+          "default": 120000,
+          "description": "1 ブロックあたりのタイムアウト（ミリ秒）。"
+        },
+        "mdJaPreview.maxBlockChars": {
+          "type": "number",
+          "default": 1500,
+          "description": "この文字数を超えるリストを項目単位で分割する。"
+        },
+        "mdJaPreview.scrollSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "原文エディタと訳文パネルのスクロールを同期する。"
+        },
+        "mdJaPreview.autoOpen": {
+          "type": "boolean",
+          "default": false,
+          "description": "Markdown を開いたとき自動で日本語プレビューを開く。"
+        }
+      }
+    }
   },
   "scripts": {
     "build": "node esbuild.mjs",
