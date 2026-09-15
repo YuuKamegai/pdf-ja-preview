@@ -4,10 +4,27 @@ import { buildWebviewHtml, createNonce } from './html';
 export class PreviewPanel {
   private readonly ready: Promise<void>;
   private markReady: () => void = () => undefined;
+  private isReady = false;
+  private disposed = false;
+  private readonly pending: unknown[] = [];
 
   private constructor(private readonly panel: vscode.WebviewPanel) {
     this.ready = new Promise<void>((resolve) => {
       this.markReady = resolve;
+    });
+    // Webview の HTML を設定する前に受信口を用意する。同期的に script が起動しても
+    // ready を取りこぼさない。
+    this.panel.webview.onDidReceiveMessage((message: { kind?: string }) => {
+      if (message.kind !== 'ready' || this.isReady || this.disposed) return;
+      this.isReady = true;
+      this.markReady();
+      for (const pending of this.pending.splice(0)) {
+        void this.panel.webview.postMessage(pending);
+      }
+    });
+    this.panel.onDidDispose(() => {
+      this.disposed = true;
+      this.pending.length = 0;
     });
   }
 
@@ -29,6 +46,8 @@ export class PreviewPanel {
         .asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', name))
         .toString();
 
+    const preview = new PreviewPanel(panel);
+
     panel.webview.html = buildWebviewHtml({
       nonce,
       cspSource: panel.webview.cspSource,
@@ -36,12 +55,6 @@ export class PreviewPanel {
       styleUri: asUri('preview.css'),
     });
 
-    const preview = new PreviewPanel(panel);
-    // ready ハンドラは whenReady() を誰かが待つより前にここで配線する。
-    // 後から配線すると、待つ側と受信の間でまた競合が生まれる。
-    preview.onMessage((message) => {
-      if (message.kind === 'ready') preview.markReady();
-    });
     return preview;
   }
 
@@ -51,6 +64,11 @@ export class PreviewPanel {
   }
 
   post(message: unknown): void {
+    if (this.disposed) return;
+    if (!this.isReady) {
+      this.pending.push(message);
+      return;
+    }
     void this.panel.webview.postMessage(message);
   }
 
@@ -67,6 +85,9 @@ export class PreviewPanel {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.pending.length = 0;
     this.panel.dispose();
   }
 }

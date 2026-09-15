@@ -9,3 +9,13 @@ test('package.json が mdJaPreview.open コマンドを宣言している', () =
   const ids = pkg.contributes.commands.map((c) => c.command);
   assert.ok(ids.includes('mdJaPreview.open'));
 });
+
+test('コマンド実行と Markdown 表示で extension を activate する', () => {
+  const pkg = JSON.parse(
+    readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+  ) as { activationEvents: string[] };
+  assert.deepEqual(pkg.activationEvents, [
+    'onCommand:mdJaPreview.open',
+    'onLanguage:markdown',
+  ]);
+});
