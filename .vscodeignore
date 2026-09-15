@@ -1,0 +1,16 @@
+# ソースとビルド道具は dist/extension.js へバンドル済みなので同梱しない。
+src/**
+test/**
+out/**
+docs/**
+node_modules/**
+esbuild.mjs
+tsconfig.json
+package-lock.json
+.vscode-test.mjs
+.vscode/**
+.vscode-test/**
+.superpowers/**
+.gitignore
+**/*.ts
+**/*.map
