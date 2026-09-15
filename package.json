@@ -1,0 +1,41 @@
+{
+  "name": "md-ja-preview",
+  "displayName": "md-ja Preview",
+  "description": "ローカル Ollama で英語 Markdown を日本語へ逐次翻訳して表示する",
+  "version": "0.1.0",
+  "publisher": "local",
+  "private": true,
+  "license": "MIT",
+  "engines": { "vscode": "^1.137.0" },
+  "categories": ["Other"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mdJaPreview.open",
+        "title": "日本語プレビューを開く",
+        "category": "md-ja"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --import tsx --test \"test/unit/**/*.test.ts\"",
+    "test": "npm run typecheck && npm run test:unit"
+  },
+  "dependencies": {
+    "markdown-it": "^14.3.2"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.2.0",
+    "@types/node": "^24.13.4",
+    "@types/vscode": "^1.137.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.25.12",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}
