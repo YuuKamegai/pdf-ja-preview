@@ -163,6 +163,72 @@ test('タイムアウトは OllamaUnavailableError になる', async () => {
   );
 });
 
+test('ストリーム読み取り中のタイムアウトは OllamaUnavailableError になる', async () => {
+  const encoder = new TextEncoder();
+  const fetchImpl = async (_url: string, init: RequestInit) => {
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(streamController) {
+        pulls++;
+        if (pulls === 1) {
+          streamController.enqueue(encoder.encode(JSON.stringify(chunk('途中まで')) + '\n'));
+          return undefined;
+        }
+        // 読み手が先頭チャンクを消費した。あとはタイムアウトを待つ。
+        return new Promise<void>((resolve) => {
+          init.signal?.addEventListener('abort', () => {
+            streamController.error(new DOMException('timeout', 'TimeoutError'));
+            resolve();
+          });
+        });
+      },
+    });
+    return new Response(body, { status: 200 });
+  };
+
+  await assert.rejects(
+    translateBlock({
+      source: 'x',
+      headingContext: '',
+      config: { ...CONFIG, timeoutMs: 30 },
+      signal: new AbortController().signal,
+      fetchImpl: fetchImpl as unknown as typeof globalThis.fetch,
+    }),
+    OllamaUnavailableError,
+  );
+});
+
+test('ストリーム読み取り中の呼び出し側 abort は AbortError のまま伝わる', async () => {
+  const encoder = new TextEncoder();
+  const controller = new AbortController();
+  const fetchImpl = async () => {
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(streamController) {
+        pulls++;
+        if (pulls === 1) {
+          streamController.enqueue(encoder.encode(JSON.stringify(chunk('途中まで')) + '\n'));
+          return;
+        }
+        controller.abort();
+        streamController.error(new DOMException('aborted', 'AbortError'));
+      },
+    });
+    return new Response(body, { status: 200 });
+  };
+
+  await assert.rejects(
+    translateBlock({
+      source: 'x',
+      headingContext: '',
+      config: CONFIG,
+      signal: controller.signal,
+      fetchImpl: fetchImpl as unknown as typeof globalThis.fetch,
+    }),
+    (error: unknown) => (error as Error).name === 'AbortError',
+  );
+});
+
 test('原文にフェンスが無いのに訳文全体が包まれていたら外す', () => {
   assert.equal(stripOuterFence('Plain.', '```markdown\n訳文。\n```'), '訳文。');
   assert.equal(stripOuterFence('Plain.', '```\n訳文。\n```'), '訳文。');

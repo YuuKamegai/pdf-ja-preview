@@ -65,6 +65,24 @@ interface ChatChunk {
   error?: string;
 }
 
+/**
+ * 中断に起因するエラーを分類する。中断でなければ undefined。
+ * 呼び出し側の中断はそのまま返す（キューはこれを正常なキャンセルとして扱う）。
+ * タイムアウトは可用性の問題として OllamaUnavailableError に包む。
+ */
+function abortFailure(
+  cause: unknown,
+  signal: AbortSignal,
+  timeout: AbortSignal,
+  timeoutMs: number,
+): unknown | undefined {
+  if (signal.aborted) return cause;
+  if (timeout.aborted) {
+    return new OllamaUnavailableError(`Ollama の応答が ${timeoutMs}ms を超えました`, { cause });
+  }
+  return undefined;
+}
+
 export async function translateBlock(args: {
   source: string;
   headingContext: string;
@@ -88,14 +106,8 @@ export async function translateBlock(args: {
       signal: combined,
     });
   } catch (cause) {
-    // 呼び出し側の中断はそのまま伝える。タイムアウトと接続失敗は可用性の問題として扱う。
-    if (signal.aborted) throw cause;
-    if (timeout.aborted) {
-      throw new OllamaUnavailableError(
-        `Ollama の応答が ${config.timeoutMs}ms を超えました`,
-        { cause },
-      );
-    }
+    const aborted = abortFailure(cause, signal, timeout, config.timeoutMs);
+    if (aborted !== undefined) throw aborted;
     throw new OllamaUnavailableError(`Ollama へ接続できません: ${config.endpoint}`, { cause });
   }
 
@@ -132,6 +144,13 @@ export async function translateBlock(args: {
       for (const line of lines) consume(line);
     }
     consume(buffer);
+  } catch (cause) {
+    // 読み取り中の中断も接続時と同じ分類にかける。これを怠ると、モデルが途中で
+    // 停止したときのタイムアウトが呼び出し側のキャンセルと見分けられず、
+    // バナーを出さないまま静かに翻訳が止まる。
+    await reader.cancel(cause).catch(() => undefined);
+    const aborted = abortFailure(cause, signal, timeout, config.timeoutMs);
+    throw aborted ?? cause;
   } finally {
     reader.releaseLock();
   }
