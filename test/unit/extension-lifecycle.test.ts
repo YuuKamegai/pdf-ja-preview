@@ -10,6 +10,9 @@ interface Harness {
   commands: Map<string, () => unknown>;
   editorListeners: Array<(editor: unknown) => unknown>;
   saveListeners: Array<{ handler(document: any): void; disposed: boolean }>;
+  visibleRangeListeners: Array<{ handler(event: any): void; disposed: boolean }>;
+  visibleTextEditors: FakeEditor[];
+  reveals: Array<{ line: number; type: string }>;
   panels: FakePanel[];
   loads: Array<{ resolve(): void }>;
   sessions: FakeSession[];
@@ -17,6 +20,14 @@ interface Harness {
   config: Record<string, unknown>;
   errors: string[];
   activeTextEditor?: { document: { languageId: string; fileName: string; uri: { toString(): string }; getText(): string } };
+}
+
+class FakeEditor {
+  constructor(private readonly uri: string) {}
+  document = { uri: { toString: () => this.uri } };
+  revealRange(range: { startLine: number }, type: string): void {
+    harness.reveals.push({ line: range.startLine, type });
+  }
 }
 
 class FakePanel {
@@ -37,6 +48,10 @@ class FakePanel {
 }
 
 class FakeSession {
+  blocks = [
+    { index: 0, kind: 'paragraph', source: 'A', lineStart: 0, lineEnd: 0 },
+    { index: 1, kind: 'paragraph', source: 'B', lineStart: 4, lineEnd: 4 },
+  ];
   opens: string[] = [];
   updates: string[] = [];
   updateError?: Error;
@@ -92,7 +107,9 @@ after(async () => { await rm(outputDir, { recursive: true, force: true }); });
 beforeEach(() => {
   extension?.deactivate();
   harness = {
-    commands: new Map(), editorListeners: [], saveListeners: [], panels: [], loads: [], sessions: [], caches: [], config: {}, errors: [],
+    commands: new Map(), editorListeners: [], saveListeners: [], visibleRangeListeners: [], panels: [], loads: [],
+    sessions: [], caches: [], config: {}, errors: [], reveals: [],
+    visibleTextEditors: [new FakeEditor('file:///a.md')],
     activeTextEditor: { document: { languageId: 'markdown', fileName: 'a.md', uri: { toString: () => 'file:///a.md' }, getText: () => '# A' } },
   };
   (globalThis as any).__mdJaHarness = harness;
@@ -106,6 +123,12 @@ const mocks: Record<string, string> = {
       onDidChangeActiveTextEditor(fn) { globalThis.__mdJaHarness.editorListeners.push(fn); return {}; },
       showWarningMessage() {},
       showErrorMessage(message) { globalThis.__mdJaHarness.errors.push(message); },
+      get visibleTextEditors() { return globalThis.__mdJaHarness.visibleTextEditors; },
+      onDidChangeTextEditorVisibleRanges(handler) {
+        const listener = { handler, disposed: false };
+        globalThis.__mdJaHarness.visibleRangeListeners.push(listener);
+        return { dispose() { listener.disposed = true; } };
+      },
     },
     workspace: {
       getConfiguration() { return { get(k) { return globalThis.__mdJaHarness.config[k]; } }; },
@@ -116,6 +139,8 @@ const mocks: Record<string, string> = {
       },
     },
     Uri: { joinPath(base, name) { return { fsPath: base.fsPath + '/' + name }; } },
+    Range: class { constructor(startLine, startChar, endLine, endChar) { this.startLine = startLine; } },
+    TextEditorRevealType: { AtTop: 'AtTop' },
   };`,
   cache: `exports.TranslationCache = class {
     constructor() { this.flushes = 0; globalThis.__mdJaHarness.caches.push(this); }
@@ -226,4 +251,64 @@ test('保存時 update の失敗を unhandled rejection にせず通知する', 
   await tick();
   assert.equal(harness.errors.length, 1);
   assert.match(harness.errors[0], /save failed/);
+});
+
+function visibleRangesEvent(uri: string, line: number) {
+  return {
+    textEditor: { document: { uri: { toString: () => uri } } },
+    visibleRanges: [{ start: { line } }],
+  };
+}
+
+async function opened(): Promise<void> {
+  extension.activate(context());
+  const running = harness.commands.get('mdJaPreview.open')!();
+  harness.loads[0].resolve();
+  await running;
+}
+
+test('原文エディタのスクロールを、その行を含むブロックの scrollTo として送る', async () => {
+  await opened();
+  harness.panels[0].messages.length = 0;
+
+  harness.visibleRangeListeners[0].handler(visibleRangesEvent('file:///other.md', 4));
+  harness.visibleRangeListeners[0].handler(visibleRangesEvent('file:///a.md', 5));
+
+  assert.deepEqual(harness.panels[0].messages, [{ kind: 'scrollTo', index: 1, ratio: 0 }]);
+});
+
+test('パネルのスクロールを原文エディタの revealRange へ伝える', async () => {
+  await opened();
+
+  harness.panels[0].receive({ kind: 'scrolled', index: 1 });
+
+  assert.deepEqual(harness.reveals, [{ line: 4, type: 'AtTop' }]);
+});
+
+test('自分が起こした同期の跳ね返りは無視する', async () => {
+  await opened();
+  harness.panels[0].messages.length = 0;
+
+  harness.visibleRangeListeners[0].handler(visibleRangesEvent('file:///a.md', 5));
+  harness.panels[0].receive({ kind: 'scrolled', index: 1 });
+
+  assert.equal(harness.panels[0].messages.length, 1);
+  assert.deepEqual(harness.reveals, [], '跳ね返りでエディタを動かさないこと');
+});
+
+test('scrollSync=false ならどちら向きの同期も配線しない', async () => {
+  harness.config.scrollSync = false;
+  await opened();
+  harness.panels[0].messages.length = 0;
+
+  assert.equal(harness.visibleRangeListeners.length, 0);
+  harness.panels[0].receive({ kind: 'scrolled', index: 1 });
+  assert.deepEqual(harness.reveals, []);
+});
+
+test('panel dispose でスクロール listener を解除する', async () => {
+  await opened();
+  assert.equal(harness.visibleRangeListeners[0].disposed, false);
+  harness.panels[0].dispose();
+  assert.equal(harness.visibleRangeListeners[0].disposed, true);
 });

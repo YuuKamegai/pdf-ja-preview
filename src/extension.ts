@@ -3,6 +3,7 @@ import { resolveConfig } from './config';
 import { TranslationCache } from './cache';
 import { renderMarkdown } from './markdown/render';
 import { PreviewPanel } from './panel/panel';
+import { blockIndexAtLine, lineForBlock, SyncGate } from './panel/sync';
 import { TranslationSession, type SessionEvent } from './session';
 import { SequentialQueue } from './translate/queue';
 import { translateBlock } from './translate/ollama';
@@ -118,9 +119,49 @@ async function open(context: vscode.ExtensionContext, events: SessionEvent[]): P
 
   owned.session = session;
 
+  const gate = new SyncGate();
+
+  if (config.scrollSync) {
+    const scrollListener = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
+      if (live !== owned || owned.disposed) return;
+      if (event.textEditor.document.uri.toString() !== document.uri.toString()) return;
+      // 跳ね返りで来たスクロールなら、送り返さずに窓が閉じるのを待つ。
+      if (!gate.shouldAccept()) return;
+
+      const topLine = event.visibleRanges[0]?.start.line;
+      if (topLine === undefined) return;
+      const index = blockIndexAtLine(session.blocks, topLine);
+      if (index < 0) return;
+
+      gate.markSelfInitiated();
+      panel.post({ kind: 'scrollTo', index, ratio: 0 });
+    });
+    context.subscriptions.push(scrollListener);
+    panel.onDispose(() => scrollListener.dispose());
+  }
+
   panel.onMessage((message) => {
-    if (live === owned && !owned.disposed && message.kind === 'retry' && typeof message.index === 'number') {
+    if (live !== owned || owned.disposed) return;
+
+    if (message.kind === 'retry' && typeof message.index === 'number') {
       void session.retry(message.index);
+      return;
+    }
+
+    if (message.kind === 'scrolled' && typeof message.index === 'number') {
+      if (!config.scrollSync || !gate.shouldAccept()) return;
+
+      const editorForDocument = vscode.window.visibleTextEditors.find(
+        (candidate) => candidate.document.uri.toString() === document.uri.toString(),
+      );
+      if (!editorForDocument) return;
+
+      const line = lineForBlock(session.blocks, message.index);
+      gate.markSelfInitiated();
+      editorForDocument.revealRange(
+        new vscode.Range(line, 0, line, 0),
+        vscode.TextEditorRevealType.AtTop,
+      );
     }
   });
 
