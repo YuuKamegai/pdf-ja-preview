@@ -10,11 +10,18 @@ interface CacheEntry {
 }
 
 export function cacheKey(model: string, source: string): string {
-  return createHash('sha256').update(model).update('\n').update(source, 'utf8').digest('hex');
+  // モデル名の長さを前置きする。区切り文字だけで連結すると、モデル名に区切り文字が
+  // 含まれたとき別の (model, source) が同じハッシュ入力になりうる。
+  return createHash('sha256')
+    .update(`${model.length}\n`)
+    .update(model, 'utf8')
+    .update(source, 'utf8')
+    .digest('hex');
 }
 
 export class TranslationCache {
   private dirty = false;
+  private writing: Promise<void> = Promise.resolve();
 
   private constructor(
     private readonly filePath: string,
@@ -58,6 +65,17 @@ export class TranslationCache {
   }
 
   async flush(): Promise<void> {
+    // 保存後とパネル破棄の 2 経路から呼ばれるため多重呼び出しが起きる。
+    // 同一パスへの writeFile が重なると内容が混ざるので書き込みを直列化する。
+    const next = this.writing.then(
+      () => this.write(),
+      () => this.write(),
+    );
+    this.writing = next.catch(() => undefined);
+    await next;
+  }
+
+  private async write(): Promise<void> {
     if (!this.dirty) return;
     await mkdir(dirname(this.filePath), { recursive: true });
     await writeFile(this.filePath, JSON.stringify(Object.fromEntries(this.entries)), 'utf8');

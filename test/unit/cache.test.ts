@@ -16,6 +16,10 @@ test('キーはモデル名と原文の両方に依存する', () => {
   assert.notEqual(cacheKey('m1', 'text'), cacheKey('m1', 'other'));
 });
 
+test('モデル名に区切り文字が入っていても別のキーになる', () => {
+  assert.notEqual(cacheKey('m1\nx', 'y'), cacheKey('m1', 'x\ny'));
+});
+
 test('保存した訳を再読み込み後も取り出せる', async () => {
   const path = await tempFile();
   const first = await TranslationCache.load(path);
@@ -65,4 +69,18 @@ test('flush はワークスペースではなく渡されたパスへだけ書�
   const raw = JSON.parse(await readFile(path, 'utf8')) as Record<string, { ja: string; at: number }>;
   assert.equal(Object.keys(raw).length, 1);
   assert.equal(Object.values(raw)[0].ja, 'こんにちは。');
+});
+
+test('flush を重ねて呼んでも最後の状態が壊れずに書かれる', async () => {
+  const path = await tempFile();
+  const cache = await TranslationCache.load(path);
+
+  cache.set('m1', 'a', 'A');
+  const first = cache.flush();
+  cache.set('m1', 'b', 'B');
+  const second = cache.flush();
+  await Promise.all([first, second]);
+
+  const raw = JSON.parse(await readFile(path, 'utf8')) as Record<string, { ja: string }>;
+  assert.equal(Object.keys(raw).length, 2);
 });
