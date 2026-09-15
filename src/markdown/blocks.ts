@@ -66,21 +66,68 @@ export function splitBlocks(
   maxBlockChars = Number.POSITIVE_INFINITY,
 ): Block[] {
   const lines = text.split(/\r?\n/);
-  const blocks: Block[] = [];
+  const raw: Array<{ kind: BlockKind; source: string; lineStart: number }> = [];
 
   for (const token of md.parse(text, {})) {
-    // ネスト深度 0 の開始トークンと自己完結トークンだけを拾う。
-    // 閉じトークン (nesting < 0) と、引用やリストの内側 (level > 0) は無視する。
     if (token.level !== 0 || token.nesting < 0 || !token.map) continue;
     const kind = KIND_BY_TOKEN[token.type];
     if (!kind) continue;
-
     const [lineStart, lineEnd] = token.map;
     const source = lines.slice(lineStart, lineEnd).join('\n').replace(/\s+$/, '');
     if (source === '') continue;
+    raw.push({ kind, source, lineStart });
+  }
 
-    blocks.push(makeBlock(blocks.length, kind, source, lineStart, lineEnd));
+  const blocks: Block[] = [];
+  for (const entry of raw) {
+    const pieces =
+      entry.kind === 'list' && entry.source.length > maxBlockChars
+        ? chunkListItems(entry.source, maxBlockChars)
+        : [entry.source];
+
+    let line = entry.lineStart;
+    for (const piece of pieces) {
+      const lineEnd = line + piece.split('\n').length;
+      blocks.push(makeBlock(blocks.length, entry.kind, piece, line, lineEnd));
+      line = lineEnd;
+    }
   }
 
   return blocks;
+}
+
+const LIST_MARKER = /^(?:[-*+]|\d+[.)])\s/;
+
+/** リスト原文をトップレベル項目単位へ切る。継続行は直前の項目へ付ける。 */
+function splitListItems(source: string): string[] {
+  const items: string[] = [];
+  let current: string[] = [];
+  for (const line of source.split('\n')) {
+    if (LIST_MARKER.test(line) && current.length > 0) {
+      items.push(current.join('\n'));
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.length > 0) items.push(current.join('\n'));
+  return items;
+}
+
+/** 項目を上限まで詰め合わせる。単独で上限を超える項目はそれ自体を 1 塊にする。 */
+function chunkListItems(source: string, maxBlockChars: number): string[] {
+  const chunks: string[] = [];
+  let current: string[] = [];
+  let length = 0;
+
+  for (const item of splitListItems(source)) {
+    if (current.length > 0 && length + 1 + item.length > maxBlockChars) {
+      chunks.push(current.join('\n'));
+      current = [];
+      length = 0;
+    }
+    length = current.length === 0 ? item.length : length + 1 + item.length;
+    current.push(item);
+  }
+  if (current.length > 0) chunks.push(current.join('\n'));
+  return chunks;
 }

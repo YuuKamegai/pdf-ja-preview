@@ -58,3 +58,34 @@ test('CRLF 改行でも行範囲が崩れない', () => {
   const blocks = splitBlocks('# T\r\n\r\nbody\r\n');
   assert.deepEqual(blocks.map((b) => [b.source, b.lineStart]), [['# T', 0], ['body', 2]]);
 });
+
+const listItem = (n: number) => `- ${'x'.repeat(40)} ${n}`;
+
+test('maxBlockChars を超えるリストは項目単位でまとめ直される', () => {
+  const md = [listItem(1), listItem(2), listItem(3), listItem(4)].join('\n') + '\n';
+  const blocks = splitBlocks(md, 100);
+  assert.ok(blocks.length > 1, '分割されること');
+  assert.ok(blocks.every((b) => b.kind === 'list'));
+  assert.equal(blocks.map((b) => b.source).join('\n'), md.trimEnd());
+});
+
+test('分割後も行範囲が連続し、index が振り直される', () => {
+  const md = [listItem(1), listItem(2), listItem(3)].join('\n') + '\n';
+  const blocks = splitBlocks(md, 60);
+  assert.deepEqual(blocks.map((b) => b.index), blocks.map((_, i) => i));
+  for (let i = 1; i < blocks.length; i++) {
+    assert.equal(blocks[i].lineStart, blocks[i - 1].lineEnd);
+  }
+});
+
+test('1 項目が単独で上限を超えても、その項目は割らない', () => {
+  const blocks = splitBlocks(`- ${'y'.repeat(300)}\n`, 50);
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].source, `- ${'y'.repeat(300)}`);
+});
+
+test('上限以下のリストと、上限を超えた表は分割されない', () => {
+  assert.equal(splitBlocks('- a\n- b\n', 1000).length, 1);
+  const table = '| a | b |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |\n';
+  assert.equal(splitBlocks(table, 10).length, 1, '表は上限を超えても割らない');
+});
