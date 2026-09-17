@@ -1,0 +1,260 @@
+{
+ "body": {
+  "children": [
+   {
+    "$ref": "#/texts/0"
+   },
+   {
+    "$ref": "#/texts/1"
+   },
+   {
+    "$ref": "#/texts/2"
+   },
+   {
+    "$ref": "#/texts/3"
+   },
+   {
+    "$ref": "#/pictures/0"
+   },
+   {
+    "$ref": "#/texts/5"
+   }
+  ],
+  "content_layer": "body",
+  "label": "unspecified",
+  "name": "_root_",
+  "self_ref": "#/body"
+ },
+ "form_items": [],
+ "furniture": {
+  "children": [],
+  "content_layer": "furniture",
+  "label": "unspecified",
+  "name": "_root_",
+  "self_ref": "#/furniture"
+ },
+ "groups": [],
+ "key_value_items": [],
+ "name": "two-column",
+ "origin": {
+  "binary_hash": 1598071149449093131,
+  "filename": "two-column.pdf",
+  "mimetype": "application/pdf"
+ },
+ "pages": {
+  "1": {
+   "page_no": 1,
+   "size": {
+    "height": 800.0,
+    "width": 600.0
+   }
+  }
+ },
+ "pictures": [
+  {
+   "annotations": [],
+   "captions": [
+    {
+     "$ref": "#/texts/4"
+    }
+   ],
+   "children": [
+    {
+     "$ref": "#/texts/4"
+    }
+   ],
+   "content_layer": "body",
+   "footnotes": [],
+   "label": "picture",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 420.13433837890625,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 319.2613220214844,
+      "r": 540.2596435546875,
+      "t": 560.7418365478516
+     },
+     "charspan": [
+      0,
+      0
+     ],
+     "page_no": 1
+    }
+   ],
+   "references": [],
+   "self_ref": "#/pictures/0"
+  }
+ ],
+ "schema_name": "DoclingDocument",
+ "tables": [],
+ "texts": [
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "section_header",
+   "level": 1,
+   "orig": "Title: Recovery of Metabolite Signals After Cold Storage",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 738.481,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 60.0,
+      "r": 511.537,
+      "t": 754.206
+     },
+     "charspan": [
+      0,
+      56
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/0",
+   "text": "Title: Recovery of Metabolite Signals After Cold Storage"
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "Left first. The instrument was calibrated before each of the 12 runs, and the drift was kept below 0.5 percent over 30 min. Every sample was measured three times and the median value was retained.",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 630.723,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 60.0,
+      "r": 258.67100000000016,
+      "t": 696.898
+     },
+     "charspan": [
+      0,
+      196
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/1",
+   "text": "Left first. The instrument was calibrated before each of the 12 runs, and the drift was kept below 0.5 percent over 30 min. Every sample was measured three times and the median value was retained."
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "Left second. Cooling was applied at a fixed rate of 2 C per minute until the target of 25 C was reached. The holding time was 10 min for all conditions.",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 504.723,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 60.0,
+      "r": 255.6570000000002,
+      "t": 556.898
+     },
+     "charspan": [
+      0,
+      152
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/2",
+   "text": "Left second. Cooling was applied at a fixed rate of 2 C per minute until the target of 25 C was reached. The holding time was 10 min for all conditions."
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "Right first. Two independent operators repeated the protocol on separate days. Agreement between operators was 98.2 percent, and no systematic offset was detected in the paired comparison.",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 630.723,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 320.0,
+      "r": 515.0409999999997,
+      "t": 696.898
+     },
+     "charspan": [
+      0,
+      188
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/3",
+   "text": "Right first. Two independent operators repeated the protocol on separate days. Agreement between operators was 98.2 percent, and no systematic offset was detected in the paired comparison."
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "caption",
+   "orig": "Figure caption. Recovery by condition, shown as the median of three runs.",
+   "parent": {
+    "$ref": "#/pictures/0"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 388.137,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 320.0,
+      "r": 473.0630000000004,
+      "t": 407.462
+     },
+     "charspan": [
+      0,
+      73
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/4",
+   "text": "Figure caption. Recovery by condition, shown as the median of three runs."
+  },
+  {
+   "children": [],
+   "content_layer": "furniture",
+   "label": "page_footer",
+   "orig": "Preprint - page 1",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 38.34400000000005,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 270.208,
+      "r": 329.7919999999998,
+      "t": 45.74400000000003
+     },
+     "charspan": [
+      0,
+      17
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/5",
+   "text": "Preprint - page 1"
+  }
+ ],
+ "version": "1.10.0"
+}

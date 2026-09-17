@@ -1,0 +1,7 @@
+# 既定は自動判定。改行はリポジトリ内で LF に正規化する。
+* text=auto eol=lf
+
+# バイナリ。改行変換をすると壊れる。
+*.pdf binary
+*.png binary
+*.vsix binary

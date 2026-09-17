@@ -1,0 +1,4 @@
+# 合成 fixture PDF を作るためだけの依存。本番の抽出ワーカーには入れない。
+reportlab
+pypdf
+pypdfium2

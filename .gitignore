@@ -9,3 +9,6 @@ dist-web/
 test-results/
 playwright-report/
 .playwright/
+__pycache__/
+.venv-pdf-fixtures/
+*.pyc

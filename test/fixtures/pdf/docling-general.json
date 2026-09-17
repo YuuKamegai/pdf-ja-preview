@@ -1,0 +1,231 @@
+{
+ "body": {
+  "children": [
+   {
+    "$ref": "#/texts/0"
+   },
+   {
+    "$ref": "#/texts/1"
+   },
+   {
+    "$ref": "#/texts/2"
+   },
+   {
+    "$ref": "#/texts/3"
+   },
+   {
+    "$ref": "#/texts/4"
+   },
+   {
+    "$ref": "#/texts/5"
+   }
+  ],
+  "content_layer": "body",
+  "label": "unspecified",
+  "name": "_root_",
+  "self_ref": "#/body"
+ },
+ "form_items": [],
+ "furniture": {
+  "children": [],
+  "content_layer": "furniture",
+  "label": "unspecified",
+  "name": "_root_",
+  "self_ref": "#/furniture"
+ },
+ "groups": [],
+ "key_value_items": [],
+ "name": "general",
+ "origin": {
+  "binary_hash": 6684662083259045506,
+  "filename": "general.pdf",
+  "mimetype": "application/pdf"
+ },
+ "pages": {
+  "1": {
+   "page_no": 1,
+   "size": {
+    "height": 792.0,
+    "width": 612.0
+   }
+  },
+  "2": {
+   "page_no": 2,
+   "size": {
+    "height": 792.0,
+    "width": 612.0
+   }
+  }
+ },
+ "pictures": [],
+ "schema_name": "DoclingDocument",
+ "tables": [],
+ "texts": [
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "section_header",
+   "level": 1,
+   "orig": "Quarterly Notes",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 711.446,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 72.0,
+      "r": 237.044,
+      "t": 731.796
+     },
+     "charspan": [
+      0,
+      15
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/0",
+   "text": "Quarterly Notes"
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "The device was calibrated at 25 degrees Celsius before every run. Each measurement was repeated three times and averaged. Results are reported with a tolerance of 0.5 percent. The operator recorded the ambient humidity for each session.",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 620.723,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 72.0,
+      "r": 394.80600000000004,
+      "t": 672.898
+     },
+     "charspan": [
+      0,
+      236
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/1",
+   "text": "The device was calibrated at 25 degrees Celsius before every run. Each measurement was repeated three times and averaged. Results are reported with a tolerance of 0.5 percent. The operator recorded the ambient humidity for each session."
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "section_header",
+   "level": 1,
+   "orig": "Method",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 584.688,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 72.0,
+      "r": 128.88,
+      "t": 599.488
+     },
+     "charspan": [
+      0,
+      6
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/2",
+   "text": "Method"
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "Samples were held at 25 C for 10 min and then cooled. The cooling rate was fixed at 2 C per minute. Each condition was repeated on two separate days.",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 516.723,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 72.0,
+      "r": 340.411,
+      "t": 554.898
+     },
+     "charspan": [
+      0,
+      149
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/3",
+   "text": "Samples were held at 25 C for 10 min and then cooled. The cooling rate was fixed at 2 C per minute. Each condition was repeated on two separate days."
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "section_header",
+   "level": 1,
+   "orig": "Discussion",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 712.688,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 72.0,
+      "r": 157.36000000000004,
+      "t": 727.488
+     },
+     "charspan": [
+      0,
+      10
+     ],
+     "page_no": 2
+    }
+   ],
+   "self_ref": "#/texts/4",
+   "text": "Discussion"
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "The second page continues the discussion of the method. No further calibration was required. The observed spread is consistent with the stated tolerance.",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 644.723,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 72.0,
+      "r": 364.8639999999999,
+      "t": 682.898
+     },
+     "charspan": [
+      0,
+      153
+     ],
+     "page_no": 2
+    }
+   ],
+   "self_ref": "#/texts/5",
+   "text": "The second page continues the discussion of the method. No further calibration was required. The observed spread is consistent with the stated tolerance."
+  }
+ ],
+ "version": "1.10.0"
+}

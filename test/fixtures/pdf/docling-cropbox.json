@@ -1,0 +1,102 @@
+{
+ "body": {
+  "children": [
+   {
+    "$ref": "#/texts/0"
+   },
+   {
+    "$ref": "#/texts/1"
+   }
+  ],
+  "content_layer": "body",
+  "label": "unspecified",
+  "name": "_root_",
+  "self_ref": "#/body"
+ },
+ "form_items": [],
+ "furniture": {
+  "children": [],
+  "content_layer": "furniture",
+  "label": "unspecified",
+  "name": "_root_",
+  "self_ref": "#/furniture"
+ },
+ "groups": [],
+ "key_value_items": [],
+ "name": "cropbox",
+ "origin": {
+  "binary_hash": 14821525511678384162,
+  "filename": "cropbox.pdf",
+  "mimetype": "application/pdf"
+ },
+ "pages": {
+  "1": {
+   "page_no": 1,
+   "size": {
+    "height": 800.0,
+    "width": 600.0
+   }
+  }
+ },
+ "pictures": [],
+ "schema_name": "DoclingDocument",
+ "tables": [],
+ "texts": [
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "section_header",
+   "level": 1,
+   "orig": "Cropped Page",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 736.274,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 60.0,
+      "r": 182.022,
+      "t": 752.924
+     },
+     "charspan": [
+      0,
+      12
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/0",
+   "text": "Cropped Page"
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "This page has a CropBox whose origin is not zero. Coordinates must be taken from the crop box, not the media box.",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 682.723,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 60.0,
+      "r": 376.7119999999999,
+      "t": 706.898
+     },
+     "charspan": [
+      0,
+      113
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/1",
+   "text": "This page has a CropBox whose origin is not zero. Coordinates must be taken from the crop box, not the media box."
+  }
+ ],
+ "version": "1.10.0"
+}

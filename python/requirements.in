@@ -1,0 +1,11 @@
+# PDF 抽出ワーカー専用の依存。グローバル環境ではなく .venv-pdf にだけ入れる。
+# 実際に解決できたバージョンは requirements.lock.txt に固定する。
+
+# レイアウトと読み順を保った PDF 変換
+docling
+
+# ページ寸法・CropBox・回転・暗号化の確認（Docling とは独立に PDF を読む）
+pypdf
+
+# ワーカーの試験
+pytest

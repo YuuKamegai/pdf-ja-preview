@@ -1,0 +1,338 @@
+{
+ "body": {
+  "children": [
+   {
+    "$ref": "#/texts/0"
+   },
+   {
+    "$ref": "#/texts/1"
+   },
+   {
+    "$ref": "#/pictures/0"
+   },
+   {
+    "$ref": "#/texts/4"
+   },
+   {
+    "$ref": "#/texts/5"
+   },
+   {
+    "$ref": "#/texts/6"
+   },
+   {
+    "$ref": "#/texts/7"
+   }
+  ],
+  "content_layer": "body",
+  "label": "unspecified",
+  "name": "_root_",
+  "self_ref": "#/body"
+ },
+ "form_items": [],
+ "furniture": {
+  "children": [],
+  "content_layer": "furniture",
+  "label": "unspecified",
+  "name": "_root_",
+  "self_ref": "#/furniture"
+ },
+ "groups": [],
+ "key_value_items": [],
+ "name": "rotated",
+ "origin": {
+  "binary_hash": 11137083690215593575,
+  "filename": "rotated.pdf",
+  "mimetype": "application/pdf"
+ },
+ "pages": {
+  "1": {
+   "page_no": 1,
+   "size": {
+    "height": 800.0,
+    "width": 600.0
+   }
+  },
+  "2": {
+   "page_no": 2,
+   "size": {
+    "height": 600.0,
+    "width": 800.0
+   }
+  },
+  "3": {
+   "page_no": 3,
+   "size": {
+    "height": 800.0000000000001,
+    "width": 599.9999999999999
+   }
+  },
+  "4": {
+   "page_no": 4,
+   "size": {
+    "height": 599.9999999999999,
+    "width": 800.0000000000001
+   }
+  }
+ },
+ "pictures": [
+  {
+   "annotations": [],
+   "captions": [],
+   "children": [
+    {
+     "$ref": "#/texts/2"
+    },
+    {
+     "$ref": "#/texts/3"
+    }
+   ],
+   "content_layer": "body",
+   "footnotes": [],
+   "label": "picture",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 419.31068420410156,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 674.8517456054688,
+      "r": 732.8570556640625,
+      "t": 542.1281700134277
+     },
+     "charspan": [
+      0,
+      0
+     ],
+     "page_no": 2
+    }
+   ],
+   "references": [],
+   "self_ref": "#/pictures/0"
+  }
+ ],
+ "schema_name": "DoclingDocument",
+ "tables": [],
+ "texts": [
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "Rotation page 0",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 716.688,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 60.0,
+      "r": 180.01600000000002,
+      "t": 731.488
+     },
+     "charspan": [
+      0,
+      15
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/0",
+   "text": "Rotation page 0"
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "section_header",
+   "level": 1,
+   "orig": "Body text of page 0.",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 676.723,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 60.0,
+      "r": 157.84500000000008,
+      "t": 686.898
+     },
+     "charspan": [
+      0,
+      20
+     ],
+     "page_no": 1
+    }
+   ],
+   "self_ref": "#/texts/1",
+   "text": "Body text of page 0."
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "Rotation page 1",
+   "parent": {
+    "$ref": "#/pictures/0"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 419.98400000000004,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 716.688,
+      "r": 731.488,
+      "t": 540.0
+     },
+     "charspan": [
+      0,
+      15
+     ],
+     "page_no": 2
+    }
+   ],
+   "self_ref": "#/texts/2",
+   "text": "Rotation page 1"
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "Body text of page 1.",
+   "parent": {
+    "$ref": "#/pictures/0"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 442.155,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 676.723,
+      "r": 686.898,
+      "t": 540.0
+     },
+     "charspan": [
+      0,
+      20
+     ],
+     "page_no": 2
+    }
+   ],
+   "self_ref": "#/texts/3",
+   "text": "Body text of page 1."
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "Body text of page 2.",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 113.10200000000009,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 442.15499999999986,
+      "r": 540.0,
+      "t": 123.27700000000016
+     },
+     "charspan": [
+      0,
+      20
+     ],
+     "page_no": 3
+    }
+   ],
+   "self_ref": "#/texts/4",
+   "text": "Body text of page 2."
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "Rotation page 2",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 68.51200000000006,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 419.9839999999999,
+      "r": 540.0,
+      "t": 83.31200000000013
+     },
+     "charspan": [
+      0,
+      15
+     ],
+     "page_no": 3
+    }
+   ],
+   "self_ref": "#/texts/5",
+   "text": "Rotation page 2"
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "section_header",
+   "level": 1,
+   "orig": "Rotation page 3",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 59.999999999999886,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 68.51200000000006,
+      "r": 83.31200000000013,
+      "t": 180.01599999999985
+     },
+     "charspan": [
+      0,
+      15
+     ],
+     "page_no": 4
+    }
+   ],
+   "self_ref": "#/texts/6",
+   "text": "Rotation page 3"
+  },
+  {
+   "children": [],
+   "content_layer": "body",
+   "label": "text",
+   "orig": "Body text of page 3.",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 59.999999999999886,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 113.10200000000009,
+      "r": 123.27700000000016,
+      "t": 157.84499999999997
+     },
+     "charspan": [
+      0,
+      20
+     ],
+     "page_no": 4
+    }
+   ],
+   "self_ref": "#/texts/7",
+   "text": "Body text of page 3."
+  }
+ ],
+ "version": "1.10.0"
+}

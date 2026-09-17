@@ -1,0 +1,73 @@
+{
+ "body": {
+  "children": [
+   {
+    "$ref": "#/pictures/0"
+   }
+  ],
+  "content_layer": "body",
+  "label": "unspecified",
+  "name": "_root_",
+  "self_ref": "#/body"
+ },
+ "form_items": [],
+ "furniture": {
+  "children": [],
+  "content_layer": "furniture",
+  "label": "unspecified",
+  "name": "_root_",
+  "self_ref": "#/furniture"
+ },
+ "groups": [],
+ "key_value_items": [],
+ "name": "image-only",
+ "origin": {
+  "binary_hash": 11127866244185199738,
+  "filename": "image-only.pdf",
+  "mimetype": "application/pdf"
+ },
+ "pages": {
+  "1": {
+   "page_no": 1,
+   "size": {
+    "height": 800.0,
+    "width": 600.0
+   }
+  }
+ },
+ "pictures": [
+  {
+   "annotations": [],
+   "captions": [],
+   "children": [],
+   "content_layer": "body",
+   "footnotes": [],
+   "label": "picture",
+   "parent": {
+    "$ref": "#/body"
+   },
+   "prov": [
+    {
+     "bbox": {
+      "b": 335.7052917480469,
+      "coord_origin": "BOTTOMLEFT",
+      "l": 137.19354248046875,
+      "r": 463.4463806152344,
+      "t": 562.3968200683594
+     },
+     "charspan": [
+      0,
+      0
+     ],
+     "page_no": 1
+    }
+   ],
+   "references": [],
+   "self_ref": "#/pictures/0"
+  }
+ ],
+ "schema_name": "DoclingDocument",
+ "tables": [],
+ "texts": [],
+ "version": "1.10.0"
+}

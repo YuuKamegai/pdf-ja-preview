@@ -1,0 +1,72 @@
+{
+  "_about": [
+    "合成 fixture PDF について、人が独立に確認した期待値。抽出器の出力から作っていない。",
+    "値は `scripts/create-pdf-fixtures.py` の描画位置と、pypdfium2 が返す文字矩形",
+    "（抽出器とは別経路）の和集合から求め、レンダリング画像で目視確認した。",
+    "box は [left, top, right, bottom] の 0..1、左上原点、回転適用前。",
+    "レイアウト抽出の矩形は行の外接矩形より広く取られるため、照合は boxTolerance と",
+    "『期待矩形を含むこと』で行う。ピクセル一致は求めない。",
+    "readingOrder は各段落の先頭に置いた目印で、人が紙面を見て決めた順。"
+  ],
+  "boxTolerance": 0.03,
+  "fixtures": {
+    "two-column.pdf": {
+      "note": "二段組み。右段の先頭 'Right first.' は左段の 2 つ目 'Left second.' より上にあるので、縦位置だけで並べると順序が壊れる。",
+      "pages": [
+        {
+          "number": 1,
+          "width": 600,
+          "height": 800,
+          "rotation": 0,
+          "originX": 0,
+          "originY": 0,
+          "status": "ok"
+        }
+      ],
+      "readingOrder": ["Title", "Left first.", "Left second.", "Right first.", "Figure caption."],
+      "blocks": [
+        {
+          "source": "Title",
+          "kind": "heading",
+          "page": 1,
+          "box": [0.1006, 0.05703, 0.851517, 0.076938]
+        },
+        {
+          "source": "Left first.",
+          "kind": "paragraph",
+          "page": 1,
+          "box": [0.10005, 0.128738, 0.4304, 0.2089]
+        },
+        {
+          "source": "Left second.",
+          "kind": "paragraph",
+          "page": 1,
+          "box": [0.100167, 0.303738, 0.424867, 0.3664]
+        },
+        {
+          "source": "Right first.",
+          "kind": "paragraph",
+          "page": 1,
+          "box": [0.533333, 0.128738, 0.857433, 0.211475]
+        },
+        {
+          "source": "Figure caption.",
+          "kind": "caption",
+          "page": 1,
+          "box": [0.5338, 0.4907, 0.7871, 0.512625]
+        },
+        {
+          "source": "Preprint - page 1",
+          "kind": "furniture",
+          "page": 1,
+          "box": [0.451367, 0.942813, 0.547217, 0.952088]
+        }
+      ],
+      "pictures": [{ "page": 1, "box": [0.533333, 0.3, 0.9, 0.475] }]
+    }
+  },
+  "knownExtractorDeviations": [
+    "rotated.pdf の 90 度ページは、文字が横倒しになるため本文ではなく図として検出される。初期版の対象外（縦書き・横倒しは扱わない）。",
+    "短い語を大きく中央寄せした表題は図と誤検出される。合成 fixture では論文らしい左揃えの長い表題にしてある。"
+  ]
+}

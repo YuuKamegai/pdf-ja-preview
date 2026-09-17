@@ -1,0 +1,5 @@
+# Windows 側の .venv-pdf に入れる依存。
+# 正規化（normalize）と前検査（pdfinfo）だけを試験する。Docling と torch は
+# Smart App Control に阻まれて Windows では読み込めないので、ここには入れない。
+pypdf
+pytest
