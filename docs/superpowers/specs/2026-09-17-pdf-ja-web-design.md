@@ -1,7 +1,7 @@
 # PDF 日本語プレビュー Web アプリ設計
 
 - 日付: 2026-09-17
-- 状態: 設計レビュー待ち。実装未着手。
+- 状態: 承認済み（2026-09-17）。実装計画作成済み。実装未着手。
 - 合意済み: ローカル Web アプリ、原文 PDF と日本語の左右表示、学術論文と一般文書が対象、ローカル LLM を使用。
 
 ## 1. 目的と初期版
@@ -125,6 +125,8 @@ Python ワーカーの stdout は構造化 JSON、stderr は診断用とする�
 - Docling のモデル事前取得・オフライン設定: https://docling-project.github.io/docling/usage/advanced_options/
 
 ## 10. 次の工程
+
+実装計画: `docs/superpowers/plans/2026-09-17-pdf-ja-web.md`。
 
 設計レビュー後、具体的なファイル/API、RED→GREEN のテスト、セットアップ、実 PDF とローカル LLM の検証手順を実装計画へ落とす。
 依存環境の構築や機能実装は本設計レビュー後に実施する。
