@@ -78,13 +78,17 @@
     "test:unit": "node --import tsx --test \"test/unit/**/*.test.ts\"",
     "typecheck:web": "tsc --noEmit -p web/tsconfig.json",
     "test:web": "node --import tsx --test \"test/web/**/*.test.ts\"",
+    "build:web": "node web/esbuild.mjs",
+    "watch:web": "node web/esbuild.mjs --watch",
+    "start:web": "node dist-web/server.cjs",
     "package": "npm run build && vsce package --allow-missing-repository --out md-ja-preview.vsix",
     "pretest:integration": "npm run build",
     "test:integration": "vscode-test",
     "test": "npm run typecheck && npm run test:unit"
   },
   "dependencies": {
-    "markdown-it": "^14.3.2"
+    "markdown-it": "^14.3.2",
+    "pdfjs-dist": "6.3.289"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.2.0",

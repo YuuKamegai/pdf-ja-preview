@@ -120,7 +120,12 @@ export class DocumentStore {
     return entry !== undefined && entry.refs > 0;
   }
 
-  /** 参照が 0 になったら抽出を止めて一時 PDF を消す。 */
+  /**
+   * 参照が 0 になったら抽出を止めて一時 PDF を消す。
+   *
+   * 登録直後の参照数は 0（まだ誰も開いていない）。セッションが retain し、閉じると
+   * release する。最後のセッションが閉じた文書は、そこで片づける。
+   */
   async release(id: string): Promise<void> {
     const entry = this.#entries.get(id);
     if (!entry) return;
@@ -193,7 +198,8 @@ export class DocumentStore {
       name,
       file,
       state: 'queued',
-      refs: 1,
+      // まだ誰も開いていない。セッションが作られたときに retain する。
+      refs: 0,
       controller: new AbortController(),
       closed: false,
     };

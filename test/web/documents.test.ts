@@ -220,6 +220,7 @@ test('空の入力は拒否する', async (t) => {
 test('参照が 0 になったら抽出を止めて一時 PDF を消す', async (t) => {
   const { store } = await setup(t, fakeExtractor('spin'));
   const job = await store.register(bytesOf('%PDF-1.7 spin'), 'x.pdf');
+  store.retain(job.id);
   const path = store.pdfPath(job.id);
   assert.ok(path);
   assert.equal(await exists(path), true);
@@ -230,9 +231,17 @@ test('参照が 0 になったら抽出を止めて一時 PDF を消す', async 
   assert.equal(await exists(path), false);
 });
 
+test('登録直後は誰も開いていない', async (t) => {
+  const { store } = await setup(t, fakeExtractor('ok'));
+  const job = await store.register(bytesOf('%PDF-1.7 fresh'), 'x.pdf');
+  assert.equal(store.isInUse(job.id), false);
+  assert.notEqual(store.get(job.id), undefined, 'まだ閉じない');
+});
+
 test('retain した分だけ release しないと閉じない', async (t) => {
   const { store } = await setup(t, fakeExtractor('ok'));
   const job = await store.register(bytesOf('%PDF-1.7 refs'), 'x.pdf');
+  assert.equal(store.retain(job.id), true);
   assert.equal(store.retain(job.id), true);
 
   await store.release(job.id);
@@ -245,6 +254,7 @@ test('retain した分だけ release しないと閉じない', async (t) => {
 test('使用中の文書は閉じられない', async (t) => {
   const { store } = await setup(t, fakeExtractor('ok'));
   const job = await store.register(bytesOf('%PDF-1.7 busy'), 'x.pdf');
+  assert.equal(store.retain(job.id), true);
   assert.equal(await store.closeIfUnused(job.id), false);
 
   await store.release(job.id);
@@ -264,7 +274,7 @@ test('待ち行列に残ったまま閉じられたジョブは実行しない',
 
   const first = await store.register(bytesOf('%PDF-1.7 first'), 'a.pdf');
   const second = await store.register(bytesOf('%PDF-1.7 second'), 'b.pdf');
-  await store.release(second.id);
+  assert.equal(await store.closeIfUnused(second.id), true);
   await store.idle();
 
   assert.equal(started, 1);
