@@ -49,6 +49,26 @@ export interface RetryRequest {
   bypassCache: boolean;
 }
 
+/** 閲覧セッションの全状態。SSE の最初と再接続で丸ごと送る。 */
+export interface Snapshot {
+  sessionId: string;
+  documentId: string;
+  /** モデル変更・キャッシュ削除で上がる。古い世代の結果は捨てる。 */
+  generation: number;
+  page: number;
+  paused: boolean;
+  model: string;
+  blocks: TranslationState[];
+  error?: ProtocolError;
+}
+
+export type ServerEvent =
+  | { type: 'snapshot'; value: Snapshot }
+  | { type: 'block'; sessionId: string; generation: number; value: TranslationState }
+  | { type: 'error'; sessionId: string; generation: number; code: string; message: string }
+  | { type: 'document'; documentId: string; state: ExtractionState }
+  | { type: 'heartbeat' };
+
 /** 要求の形が契約に合わない。HTTP では 400 にする。 */
 export class ProtocolContractError extends Error {
   readonly code: string;
