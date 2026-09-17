@@ -4,3 +4,8 @@ out/
 .vscode-test/
 *.vsix
 .superpowers/
+dist-web/
+.venv-pdf/
+test-results/
+playwright-report/
+.playwright/

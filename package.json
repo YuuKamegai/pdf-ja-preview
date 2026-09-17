@@ -76,6 +76,8 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --import tsx --test \"test/unit/**/*.test.ts\"",
+    "typecheck:web": "tsc --noEmit -p web/tsconfig.json",
+    "test:web": "node --import tsx --test \"test/web/**/*.test.ts\"",
     "package": "npm run build && vsce package --allow-missing-repository --out md-ja-preview.vsix",
     "pretest:integration": "npm run build",
     "test:integration": "vscode-test",
