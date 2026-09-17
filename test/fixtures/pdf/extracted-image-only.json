@@ -1,0 +1,42 @@
+{
+ "schema": "pdf-document.v1",
+ "hash": "60583f8fa5cc1e85a6a523b455449c525dbc74caaa77dfd8e01facb06e2aa254",
+ "extractor": {
+  "version": "docling-1",
+  "configHash": "76b9d7a0ee7dd854b0a2aabac7edbbf0f1b5399ea86f23bdb05f57f8c01c56a9"
+ },
+ "pages": [
+  {
+   "number": 1,
+   "width": 600,
+   "height": 800,
+   "rotation": 0,
+   "status": "no-text"
+  }
+ ],
+ "blocks": [
+  {
+   "id": "pictures-0",
+   "kind": "picture",
+   "order": 0,
+   "source": "",
+   "headingContext": "",
+   "translatable": false,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.228656,
+      0.297004,
+      0.772411,
+      0.580368
+     ]
+    }
+   ],
+   "relatedIds": []
+  }
+ ],
+ "warnings": [
+  "ページ 1 からは文章を抽出できません"
+ ]
+}

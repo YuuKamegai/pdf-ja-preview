@@ -1,0 +1,253 @@
+{
+ "schema": "pdf-document.v1",
+ "hash": "60953776f63a3cfc3cf424df82ff3f7847b5f31902da3d8d9a8ede9c0518d667",
+ "extractor": {
+  "version": "docling-1",
+  "configHash": "76b9d7a0ee7dd854b0a2aabac7edbbf0f1b5399ea86f23bdb05f57f8c01c56a9"
+ },
+ "pages": [
+  {
+   "number": 1,
+   "width": 600,
+   "height": 800,
+   "rotation": 0,
+   "status": "ok"
+  },
+  {
+   "number": 2,
+   "width": 600,
+   "height": 800,
+   "rotation": 90,
+   "status": "ok"
+  },
+  {
+   "number": 3,
+   "width": 600,
+   "height": 800,
+   "rotation": 180,
+   "status": "ok"
+  },
+  {
+   "number": 4,
+   "width": 600,
+   "height": 800,
+   "rotation": 270,
+   "status": "ok"
+  }
+ ],
+ "blocks": [
+  {
+   "id": "texts-0",
+   "kind": "paragraph",
+   "order": 0,
+   "source": "Rotation page 0",
+   "headingContext": "",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.1,
+      0.08564,
+      0.300027,
+      0.10414
+     ],
+     "charRange": [
+      0,
+      15
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-1",
+   "kind": "heading",
+   "order": 1,
+   "source": "Body text of page 0.",
+   "headingContext": "",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.1,
+      0.141377,
+      0.263075,
+      0.154096
+     ],
+     "charRange": [
+      0,
+      20
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "pictures-0",
+   "kind": "picture",
+   "order": 2,
+   "source": "",
+   "headingContext": "Body text of page 0.",
+   "translatable": false,
+   "regions": [
+    {
+     "page": 2,
+     "box": [
+      0.096453,
+      0.083929,
+      0.301149,
+      0.156435
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-2",
+   "kind": "paragraph",
+   "order": 3,
+   "source": "Rotation page 1",
+   "headingContext": "Body text of page 0.",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 2,
+     "box": [
+      0.1,
+      0.08564,
+      0.300027,
+      0.10414
+     ],
+     "charRange": [
+      0,
+      15
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-3",
+   "kind": "paragraph",
+   "order": 4,
+   "source": "Body text of page 1.",
+   "headingContext": "Body text of page 0.",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 2,
+     "box": [
+      0.1,
+      0.141377,
+      0.263075,
+      0.154096
+     ],
+     "charRange": [
+      0,
+      20
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-4",
+   "kind": "paragraph",
+   "order": 5,
+   "source": "Body text of page 2.",
+   "headingContext": "Body text of page 0.",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 3,
+     "box": [
+      0.1,
+      0.141378,
+      0.263075,
+      0.154096
+     ],
+     "charRange": [
+      0,
+      20
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-5",
+   "kind": "paragraph",
+   "order": 6,
+   "source": "Rotation page 2",
+   "headingContext": "Body text of page 0.",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 3,
+     "box": [
+      0.1,
+      0.08564,
+      0.300027,
+      0.10414
+     ],
+     "charRange": [
+      0,
+      15
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-6",
+   "kind": "heading",
+   "order": 7,
+   "source": "Rotation page 3",
+   "headingContext": "Body text of page 0.",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 4,
+     "box": [
+      0.1,
+      0.08564,
+      0.300027,
+      0.10414
+     ],
+     "charRange": [
+      0,
+      15
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-7",
+   "kind": "paragraph",
+   "order": 8,
+   "source": "Body text of page 3.",
+   "headingContext": "Rotation page 3",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 4,
+     "box": [
+      0.1,
+      0.141378,
+      0.263075,
+      0.154096
+     ],
+     "charRange": [
+      0,
+      20
+     ]
+    }
+   ],
+   "relatedIds": []
+  }
+ ],
+ "warnings": []
+}

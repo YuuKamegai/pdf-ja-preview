@@ -1,0 +1,68 @@
+{
+ "schema": "pdf-document.v1",
+ "hash": "76f4a87c549cd034fd9e5ff25ad851979fda2f8f70c6963bcdb0a2ecd0fad822",
+ "extractor": {
+  "version": "docling-1",
+  "configHash": "76b9d7a0ee7dd854b0a2aabac7edbbf0f1b5399ea86f23bdb05f57f8c01c56a9"
+ },
+ "pages": [
+  {
+   "number": 1,
+   "width": 600,
+   "height": 800,
+   "rotation": 0,
+   "status": "ok"
+  }
+ ],
+ "blocks": [
+  {
+   "id": "texts-0",
+   "kind": "heading",
+   "order": 0,
+   "source": "Cropped Page",
+   "headingContext": "",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.1,
+      0.058845,
+      0.30337,
+      0.079657
+     ],
+     "charRange": [
+      0,
+      12
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-1",
+   "kind": "paragraph",
+   "order": 1,
+   "source": "This page has a CropBox whose origin is not zero. Coordinates must be taken from the crop box, not the media box.",
+   "headingContext": "Cropped Page",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.1,
+      0.116377,
+      0.627853,
+      0.146596
+     ],
+     "charRange": [
+      0,
+      113
+     ]
+    }
+   ],
+   "relatedIds": []
+  }
+ ],
+ "warnings": []
+}

@@ -1,0 +1,188 @@
+{
+ "schema": "pdf-document.v1",
+ "hash": "d4cf5c1eabef1729ad25fbafd26ad6633becacf8a46e44870cd41f6b41bbc0f9",
+ "extractor": {
+  "version": "docling-1",
+  "configHash": "76b9d7a0ee7dd854b0a2aabac7edbbf0f1b5399ea86f23bdb05f57f8c01c56a9"
+ },
+ "pages": [
+  {
+   "number": 1,
+   "width": 600,
+   "height": 800,
+   "rotation": 0,
+   "status": "ok"
+  }
+ ],
+ "blocks": [
+  {
+   "id": "texts-0",
+   "kind": "heading",
+   "order": 0,
+   "source": "Title: Recovery of Metabolite Signals After Cold Storage",
+   "headingContext": "",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.1,
+      0.057242,
+      0.852562,
+      0.076899
+     ],
+     "charRange": [
+      0,
+      56
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-1",
+   "kind": "paragraph",
+   "order": 1,
+   "source": "Left first. The instrument was calibrated before each of the 12 runs, and the drift was kept below 0.5 percent over 30 min. Every sample was measured three times and the median value was retained.",
+   "headingContext": "Title: Recovery of Metabolite Signals After Cold Storage",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.1,
+      0.128877,
+      0.431118,
+      0.211596
+     ],
+     "charRange": [
+      0,
+      196
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-2",
+   "kind": "paragraph",
+   "order": 2,
+   "source": "Left second. Cooling was applied at a fixed rate of 2 C per minute until the target of 25 C was reached. The holding time was 10 min for all conditions.",
+   "headingContext": "Title: Recovery of Metabolite Signals After Cold Storage",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.1,
+      0.303877,
+      0.426095,
+      0.369096
+     ],
+     "charRange": [
+      0,
+      152
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-3",
+   "kind": "paragraph",
+   "order": 3,
+   "source": "Right first. Two independent operators repeated the protocol on separate days. Agreement between operators was 98.2 percent, and no systematic offset was detected in the paired comparison.",
+   "headingContext": "Title: Recovery of Metabolite Signals After Cold Storage",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.533333,
+      0.128877,
+      0.858402,
+      0.211596
+     ],
+     "charRange": [
+      0,
+      188
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "pictures-0",
+   "kind": "picture",
+   "order": 4,
+   "source": "",
+   "headingContext": "Title: Recovery of Metabolite Signals After Cold Storage",
+   "translatable": false,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.532102,
+      0.299073,
+      0.900433,
+      0.474832
+     ]
+    }
+   ],
+   "relatedIds": [
+    "texts-4"
+   ]
+  },
+  {
+   "id": "texts-4",
+   "kind": "caption",
+   "order": 5,
+   "source": "Figure caption. Recovery by condition, shown as the median of three runs.",
+   "headingContext": "Title: Recovery of Metabolite Signals After Cold Storage",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.533333,
+      0.490673,
+      0.788438,
+      0.514829
+     ],
+     "charRange": [
+      0,
+      73
+     ]
+    }
+   ],
+   "relatedIds": [
+    "pictures-0"
+   ]
+  },
+  {
+   "id": "texts-5",
+   "kind": "furniture",
+   "order": 6,
+   "source": "Preprint - page 1",
+   "headingContext": "Title: Recovery of Metabolite Signals After Cold Storage",
+   "translatable": false,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.450347,
+      0.94282,
+      0.549653,
+      0.95207
+     ],
+     "charRange": [
+      0,
+      17
+     ]
+    }
+   ],
+   "relatedIds": []
+  }
+ ],
+ "warnings": []
+}

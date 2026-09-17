@@ -8,7 +8,49 @@
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <header class="toolbar">
+      <label class="file">
+        <span>PDFを開く</span>
+        <input id="file" type="file" accept="application/pdf" aria-label="PDFを開く" />
+      </label>
+
+      <span class="group">
+        <button id="prev" type="button" aria-label="前のページ">◀</button>
+        <input id="page" type="number" min="1" value="1" aria-label="ページ" />
+        <span id="page-count" class="muted">/ 0</span>
+        <button id="next" type="button" aria-label="次のページ">▶</button>
+      </span>
+
+      <span class="group">
+        <button id="zoom-out" type="button" aria-label="縮小">−</button>
+        <button id="zoom-in" type="button" aria-label="拡大">＋</button>
+        <button id="rotate" type="button" aria-label="90度回転">⟳</button>
+      </span>
+
+      <span class="group">
+        <label for="model" class="muted">モデル</label>
+        <input id="model" type="text" value="qwen3.5:9b-q4_K_M" aria-label="モデル" />
+        <button id="pause" type="button">一時停止</button>
+      </span>
+
+      <span class="group">
+        <button id="clear-cache" type="button">保存した訳を消す</button>
+        <button id="close" type="button">閉じる</button>
+      </span>
+
+      <span class="status">
+        <span id="extraction-status" data-testid="extraction-status"></span>
+        <span id="progress" data-testid="progress" class="muted"></span>
+      </span>
+    </header>
+
+    <p id="banner" class="banner" data-testid="banner" hidden></p>
+
+    <main class="split">
+      <section id="pdf" class="pane" aria-label="原文"></section>
+      <section id="translation" class="pane" aria-label="訳文"></section>
+    </main>
+
     <script type="module" src="./app.js"></script>
   </body>
 </html>
