@@ -125,6 +125,21 @@ test('キーボードでページを移れる', async ({ page }) => {
   await expect(page.getByRole('spinbutton', { name: 'ページ' })).toHaveValue('1');
 });
 
+test('ページ移動を連打しても最後のページをエラーなく表示する', async ({page}) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await open(page, 'general.pdf');
+  await expect(page.getByTestId('translation-block-texts-1')).toBeVisible();
+  await page.evaluate(() => {
+    document.getElementById('next')!.click();
+    document.getElementById('prev')!.click();
+    document.getElementById('next')!.click();
+  });
+  await expect(page.getByRole('spinbutton', {name:'ページ'})).toHaveValue('2');
+  await expect(page.locator('.text-layer')).toContainText('The second page');
+  expect(errors).toEqual([]);
+});
+
 test('拡大しても位置の対応が保たれる', async ({ page }) => {
   await open(page, 'two-column.pdf');
   await page.getByTestId('translation-block-texts-1').click();
@@ -226,6 +241,24 @@ test('閉じると表示が片づく', async ({ page }) => {
 
   await page.getByRole('button', { name: '閉じる' }).click();
   await expect(page.getByTestId('translation-block-texts-1')).toHaveCount(0);
+  await expect(page.locator('#page-count')).toHaveText('/ 0');
+  await expect(page.getByTestId('pdf-page')).not.toBeVisible();
+});
+
+test('抽出中でも次の文書へ切り替えられる', async ({page}) => {
+  await page.goto('/');
+  let firstId: string | undefined;
+  await page.route('**/api/documents/*', async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const id = route.request().url().split('/').pop()!;
+    firstId ??= id;
+    if (id === firstId) return route.fulfill({json:{state:'running'}});
+    return route.continue();
+  });
+  await page.getByLabel('PDFを開く', {exact:true}).setInputFiles(fixture('two-column.pdf'));
+  await expect(page.getByTestId('extraction-status')).toHaveText('抽出中');
+  await page.getByLabel('PDFを開く', {exact:true}).setInputFiles(fixture('general.pdf'));
+  await expect(page.getByTestId('translation-block-texts-1')).toContainText('The device was calibrated');
 });
 
 test('外部への通信をしない', async ({ page }) => {

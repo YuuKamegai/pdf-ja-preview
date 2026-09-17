@@ -195,6 +195,13 @@ button:hover {
   opacity: 0.6;
 }
 
+.storage-note {
+  padding: 0.35rem 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
 details.block > summary {
   cursor: pointer;
 }

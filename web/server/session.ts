@@ -197,19 +197,20 @@ export class Session {
   }
 
   /** キャッシュを消したときなど、これまでの結果を捨ててやり直す。 */
-  invalidate(): void {
+  invalidate(restart = true): void {
     if (this.#closed) return;
-    this.#invalidate();
+    this.#invalidate(restart);
   }
 
-  #invalidate(): void {
+  #invalidate(restart = true): void {
     this.#generation += 1;
     this.#scheduler.cancel(this.sessionId);
     this.#error = undefined;
     for (const [id, state] of this.#states) {
       this.#states.set(id, { id, sourceHash: state.sourceHash, status: 'source' });
     }
-    this.start();
+    if (restart) this.start();
+    else this.#emit({type:'snapshot', value:this.snapshot()});
   }
 
   retry(blockId: string, bypassCache: boolean): boolean {
@@ -276,6 +277,7 @@ export class Session {
 
       // キャッシュを読んでいる間に取り消されていることがある。中断済みの signal に
       // あとから listener を付けても発火しないので、ここで抜ける。
+      if (this.#closed || generation !== this.#generation) return;
       if (signal.aborted) {
         this.#setState({ id: block.id, sourceHash, status: 'source' });
         return;
@@ -292,6 +294,7 @@ export class Session {
         // 世代が変わった後に返ってきた結果は、表示にもキャッシュにも入れない。
         if (this.#closed || generation !== this.#generation) return;
         await this.#storage.writeJson(translationCacheKey(this.#documentHash, key), { ja });
+        if (this.#closed || generation !== this.#generation || signal.aborted) return;
         this.#setState({ id: block.id, sourceHash, status: 'translated', ja });
       } catch (error) {
         if (this.#closed || generation !== this.#generation) return;

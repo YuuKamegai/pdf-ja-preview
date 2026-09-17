@@ -55,6 +55,11 @@ test.describe('実文書', () => {
       )
       .toBeGreaterThan(0);
 
+    await expect.poll(async () => {
+      const texts = await page.locator('.block[data-status="translated"] .body[lang="ja"]').allTextContents();
+      return texts.some(text => text.length >= 40 && /[ぁ-んァ-ン一-龯]/.test(text));
+    }, {timeout: 5 * 60_000, message:'短い見出しだけでなく本文の日本語訳が出るまで'}).toBe(true);
+
     // 訳文を押すと原文が光る。
     const translated = page.locator('.translation-view .block[data-status="translated"]').first();
     await translated.click();
@@ -62,5 +67,7 @@ test.describe('実文書', () => {
 
     await page.screenshot({ path: 'test-results/real-document.png', fullPage: false });
     expect(external, `外部への通信: ${external.join(', ')}`).toEqual([]);
+    await page.getByRole('button', {name:'閉じる', exact:true}).click();
+    await expect(page.getByTestId('pdf-page')).not.toBeVisible();
   });
 });

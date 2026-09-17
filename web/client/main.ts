@@ -58,6 +58,7 @@ export class App {
   #candidateIndex = 0;
   /** 読み込みが重ならないようにする。 */
   #opening: Promise<void> = Promise.resolve();
+  #openGeneration = 0;
 
   constructor(api: Api, elements: Elements) {
     this.#api = api;
@@ -116,6 +117,9 @@ export class App {
   // ---- 文書 ---------------------------------------------------------------
 
   async openFile(file: File): Promise<void> {
+    const generation = ++this.#openGeneration;
+    this.#extraction?.abort();
+    this.#stream?.abort();
     // 続けて選ばれたら、前の読み込みが終わってから始める。描画の途中で文書を
     // 差し替えると canvas と worker の取り合いになり、黙って古い表示が残る。
     const previous = this.#opening;
@@ -126,8 +130,10 @@ export class App {
     await previous;
 
     try {
-      await this.#openFile(file);
+      if (generation !== this.#openGeneration) return;
+      await this.#openFile(file, generation);
     } catch (error) {
+      if (generation !== this.#openGeneration) return;
       this.#banner(`PDF を開けません: ${this.#describe(error)}`);
       this.#setExtraction('error');
     } finally {
@@ -135,20 +141,28 @@ export class App {
     }
   }
 
-  async #openFile(file: File): Promise<void> {
-    await this.closeDocument();
+  async #openFile(file: File, generation: number): Promise<void> {
+    await this.#clearDocument();
+    const controller = new AbortController();
+    this.#extraction = controller;
     this.#banner('');
 
     const bytes = new Uint8Array(await file.arrayBuffer());
+    if (generation !== this.#openGeneration) return;
     // 先にローカルのバイト列で表示する。アップロードと抽出は後ろで進む。
     await this.#pdfView.open(bytes);
     await this.#pdfView.showPage(1, 1, 0);
+    if (generation !== this.#openGeneration) return;
     this.#elements.pageCount.textContent = `/ ${this.#pdfView.pageCount}`;
     this.#elements.page.value = '1';
     this.#setExtraction('queued');
 
     try {
       const accepted = await this.#api.uploadDocument(bytes);
+      if (generation !== this.#openGeneration) {
+        await this.#api.deleteDocument(accepted.documentId).catch(() => undefined);
+        return;
+      }
       this.#documentId = accepted.documentId;
     } catch (error) {
       this.#banner(this.#describe(error));
@@ -156,30 +170,35 @@ export class App {
       return;
     }
 
-    this.#extraction = new AbortController();
     try {
       const status = await this.#api.waitForDocument(
         this.#documentId,
         (state) => this.#setExtraction(state),
-        this.#extraction.signal,
+        controller.signal,
       );
+      if (generation !== this.#openGeneration) return;
       if (status.state === 'error' || !status.document) {
         this.#banner(status.error?.message ?? '抽出に失敗しました');
         return;
       }
       this.#document = status.document;
       for (const warning of status.document.warnings.slice(0, 3)) this.#banner(warning);
-      await this.#startSession();
+      await this.#startSession(generation);
     } catch (error) {
       if ((error as ApiError).code !== 'cancelled') this.#banner(this.#describe(error));
     }
   }
 
-  async #startSession(): Promise<void> {
+  async #startSession(generation: number): Promise<void> {
     if (!this.#documentId || !this.#document) return;
     const model = this.#elements.model.value.trim();
     try {
-      this.#snapshot = await this.#api.createSession(this.#documentId, model);
+      const snapshot = await this.#api.createSession(this.#documentId, model);
+      if (generation !== this.#openGeneration) {
+        await this.#api.deleteSession(snapshot.sessionId).catch(() => undefined);
+        return;
+      }
+      this.#snapshot = snapshot;
     } catch (error) {
       this.#banner(this.#describe(error));
       return;
@@ -220,6 +239,14 @@ export class App {
   }
 
   async closeDocument(): Promise<void> {
+    this.#openGeneration++;
+    this.#extraction?.abort();
+    this.#stream?.abort();
+    await this.#opening;
+    await this.#clearDocument();
+  }
+
+  async #clearDocument(): Promise<void> {
     this.#extraction?.abort();
     this.#extraction = undefined;
     this.#stream?.abort();
@@ -233,19 +260,25 @@ export class App {
     this.#candidates = [];
 
     this.#translationView.dispose();
+    await this.#pdfView.dispose();
+    this.#elements.pageCount.textContent = '/ 0';
+    this.#elements.page.value = '1';
     if (sessionId) await this.#api.deleteSession(sessionId).catch(() => undefined);
     // 取り消したときもサーバー側の文書を解除する。
     if (documentId) await this.#api.deleteDocument(documentId).catch(() => undefined);
     this.#setExtraction('');
     this.#elements.progress.textContent = '';
+    this.#banner('');
   }
 
   // ---- 表示 ---------------------------------------------------------------
 
   async goToPage(page: number): Promise<void> {
     if (this.#pdfView.pageCount === 0) return;
+    if (!Number.isFinite(page)) return;
     const clamped = Math.min(Math.max(1, Math.round(page)), this.#pdfView.pageCount);
     await this.#pdfView.showPage(clamped);
+    if (clamped !== this.#pdfView.pageNumber) return;
     this.#elements.page.value = String(clamped);
     this.#renderTranslations();
     await this.#syncPage();
@@ -389,7 +422,7 @@ export class App {
 
     this.#translationView.render(document, { ...snapshot, page: this.#pdfView.pageNumber });
 
-    const counts = countStates(snapshot);
+    const counts = countStates(snapshot, document);
     this.#elements.progress.textContent =
       `訳済み ${counts.translated} / ${counts.total}` +
       (counts.failed > 0 ? `（失敗 ${counts.failed}）` : '');
@@ -439,6 +472,8 @@ export function boot(): App {
     pdf: must('pdf'),
     translation: must('translation'),
   };
+  const defaultModel = document.querySelector('meta[name="pdf-ja-model"]')?.getAttribute('content');
+  if (defaultModel) elements.model.value = decodeURIComponent(defaultModel);
   return new App(new Api(readToken()), elements);
 }
 

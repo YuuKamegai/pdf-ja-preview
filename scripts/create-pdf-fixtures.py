@@ -147,6 +147,78 @@ def general(path: Path) -> None:
     c.save()
 
 
+def formula(path: Path) -> None:
+    """数式を含む一段組み。数式は訳さず原文のまま残るべきもの。
+
+    数式は本文と行を分け、記号を単独行に置く。本文に混ぜると、抽出器は
+    ただの文として扱い、数式として立たない。
+    """
+    c = canvas.Canvas(str(path), pagesize=(612, 792))
+
+    c.setFont(HEAD_FONT, 20)
+    c.drawString(72, 716, "Diffusion of the Tracer")
+
+    _paragraph(c, 72, 676, 468, [
+        "The tracer spreads according to the diffusion equation below.",
+        "The coefficient D was measured for each temperature.",
+    ])
+
+    # 数式。イタリック体で中央寄せにし、前後を空ける。
+    c.setFont("Times-Italic", 15)
+    c.drawCentredString(306, 596, "dC/dt = D * d2C/dx2 + k * C")
+    c.setFont("Times-Italic", 15)
+    c.drawCentredString(306, 560, "D = D0 * exp(-Ea / (R * T))")
+
+    _paragraph(c, 72, 520, 468, [
+        "Here C is the concentration and t is time in seconds.",
+        "The activation energy Ea was 42.5 kJ per mole in every run.",
+    ])
+    c.showPage()
+    c.save()
+
+
+def page_spanning(path: Path) -> None:
+    """段落が改ページをまたぐ一段組み。
+
+    1 ページ目の本文を最後の行まで詰め、文を途中で切って 2 ページ目の先頭へ続ける。
+    抽出器が 2 ページ分を 1 ブロックとしてまとめるかどうかを見るための紙。
+    まとめない場合もそれが事実なので、期待値は抽出結果から作らず別に記録する。
+    """
+    c = canvas.Canvas(str(path), pagesize=(612, 792))
+
+    c.setFont(HEAD_FONT, 20)
+    c.drawString(72, 716, "Continuous Record")
+
+    # 1 ページ目の下端まで本文で埋める。最後の行は文の途中で終える。
+    lines = [
+        "The instrument logged a reading every thirty seconds for the whole",
+        "campaign, and the operator confirmed that the pump stayed within its",
+        "rated range on each of the fourteen days that the campaign lasted.",
+        "No interruption was recorded in the primary channel, although the",
+        "secondary channel was offline for two hours on the seventh day while",
+        "the filter was replaced, and the gap was later filled by interpolating",
+        "between the two neighbouring readings, which differed by less than",
+        "0.3 percent, so the correction changed none of the reported totals and",
+        "the campaign was therefore treated as a single uninterrupted record",
+        "for the purposes of the analysis that follows in the next section of",
+        "this report, where the daily means are compared against the reference",
+        "values that the laboratory published before the campaign began and",
+    ]
+    _paragraph(c, 72, 676, 468, lines)
+    c.showPage()
+
+    # 2 ページ目は見出し無しで、前ページの文の続きから始める。
+    _paragraph(c, 72, 716, 468, [
+        "that were themselves derived from an earlier campaign carried out at",
+        "the same site under comparable conditions three years previously.",
+    ])
+    _paragraph(c, 72, 640, 468, [
+        "The comparison is summarised in the following paragraph.",
+    ])
+    c.showPage()
+    c.save()
+
+
 def image_only(path: Path) -> None:
     """文字が一切ない、図だけのページ。`no-text` になる想定。"""
     from reportlab.lib.utils import ImageReader
@@ -232,6 +304,8 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     two_column(OUT / "two-column.pdf")
     general(OUT / "general.pdf")
+    formula(OUT / "formula.pdf")
+    page_spanning(OUT / "page-spanning.pdf")
     image_only(OUT / "image-only.pdf")
     crop_box(OUT / "cropbox.pdf")
     rotated(OUT / "rotated.pdf")

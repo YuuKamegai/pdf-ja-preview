@@ -20,6 +20,13 @@ py -3.13 -m venv .venv-pdf-fixtures
 | `cropbox.pdf` | MediaBox 620x840 / CropBox `10 20 610 820`。表示領域の原点が 0 でない |
 | `rotated.pdf` | 0 / 90 / 180 / 270 度の 4 ページ |
 | `image-only.pdf` | 文字が一切ない図だけのページ。`no-text` になる |
+| `formula.pdf` | 行を分けて中央に置いた数式。**実 Docling はこれを `formula` として立てない**（1 行目は paragraph、2 行目は heading）。現状を固定する試験がある |
+| `page-spanning.pdf` | 改ページをまたぐ段落。1 ページ目の最後の行が文の途中で終わり、2 ページ目の先頭へ続く。実 Docling は 2 ページ分の provenance を持つ 1 ブロックで返すので、中間形式では `regions` が 2 件になる |
+
+生成し直すと、中身が同じでも PDF のバイト列は変わります（生成日時と file ID が入る）。
+`extracted-<name>.json` の `hash` は元の PDF の sha256 なので、**中身を変えていないなら
+PDF を差し替えないでください。** 差し替えるなら `docling-<name>.json` と
+`extracted-<name>.json` も一緒に作り直します。
 
 ## 期待値（manifest）
 
@@ -33,7 +40,7 @@ py -3.13 -m venv .venv-pdf-fixtures
 
 ## 抽出器の生出力
 
-`docling-two-column.json` は **実際の Docling が `two-column.pdf` を変換した生出力**。
+`docling-<name>.json` は **実際の Docling が各 PDF を変換した生出力**。
 手で書いていない。作り直すときは:
 
 ```powershell
@@ -51,8 +58,8 @@ docker run --rm --network none -v "${PWD}/test/fixtures/pdf:/in:ro" `
 作り直すときは:
 
 ```powershell
-$sha = (Get-FileHash testixtures\pdf	wo-column.pdf -Algorithm SHA256).Hash.ToLower()
-docker run --rm --network none -v "${PWD}	estixtures\pdf:/in:ro" pdf-ja-extractor:1 `
+$sha = (Get-FileHash test/fixtures/pdf/two-column.pdf -Algorithm SHA256).Hash.ToLower()
+docker run --rm --network none -v "${PWD}/test/fixtures/pdf:/in:ro" pdf-ja-extractor:1 `
   --input /in/two-column.pdf --hash $sha --models /models > worker.json
 node --import tsx scripts/inspect-document.ts worker.json --json test/fixtures/pdf/extracted-two-column.json
 ```

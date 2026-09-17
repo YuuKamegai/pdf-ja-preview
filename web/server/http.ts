@@ -59,6 +59,7 @@ interface SessionEntry {
   /** つながっている SSE の数。 */
   connections: number;
   reaper: NodeJS.Timeout | undefined;
+  streams: Set<http.ServerResponse>;
 }
 
 const MIME: Record<string, string> = {
@@ -125,7 +126,9 @@ function segmentsOf(pathname: string): string[] {
   return pathname.split('/').filter((part) => part !== '');
 }
 
-export function createApp(deps: AppDeps): http.Server {
+export interface AppServer extends http.Server { shutdown(): Promise<void>; }
+
+export function createApp(deps: AppDeps): AppServer {
   const sessions = new Map<string, SessionEntry>();
   const heartbeatMs = deps.heartbeatMs ?? HEARTBEAT_MS;
   const graceMs = deps.graceMs ?? SESSION_GRACE_MS;
@@ -135,6 +138,7 @@ export function createApp(deps: AppDeps): http.Server {
     const entry = sessions.get(sessionId);
     if (!entry) return;
     sessions.delete(sessionId);
+    for (const stream of entry.streams) stream.end();
     if (entry.reaper) clearTimeout(entry.reaper);
     await entry.session.close();
     await deps.documents.release(entry.documentId);
@@ -156,7 +160,14 @@ export function createApp(deps: AppDeps): http.Server {
         response.destroy();
       }
     });
-  });
+  }) as AppServer;
+  let shuttingDown: Promise<void> | undefined;
+  server.shutdown = () => shuttingDown ??= (async () => {
+    const stopped = new Promise<void>(resolve => server.close(() => resolve()));
+    await Promise.all([...sessions.keys()].map(dropSession));
+    server.closeAllConnections();
+    await stopped;
+  })();
 
   async function handle(request: http.IncomingMessage, response: http.ServerResponse): Promise<void> {
     const url = new URL(request.url ?? '/', 'http://placeholder');
@@ -281,10 +292,10 @@ export function createApp(deps: AppDeps): http.Server {
     if (hash === undefined) return sendError(response, 404, 'unknown-document', '文書がありません');
 
     // 実行中の結果でキャッシュを蘇らせない。先に世代を上げてから消す。
-    for (const entry of sessions.values()) {
-      if (entry.documentId === id) entry.session.invalidate();
-    }
+    const affected = [...sessions.values()].filter(entry => deps.documents.hashOf(entry.documentId) === hash);
+    for (const entry of affected) entry.session.invalidate(false);
     await deps.storage.deleteDocument(hash);
+    for (const entry of affected) entry.session.start();
     response.writeHead(204, SECURITY_HEADERS);
     response.end();
   }
@@ -381,6 +392,7 @@ export function createApp(deps: AppDeps): http.Server {
       documentId: body.documentId,
       connections: 0,
       reaper: undefined,
+      streams: new Set(),
     };
     sessions.set(session.sessionId, entry);
     armReaper(entry);
@@ -461,6 +473,7 @@ export function createApp(deps: AppDeps): http.Server {
     };
 
     entry.connections += 1;
+    entry.streams.add(response);
     if (entry.reaper) {
       clearTimeout(entry.reaper);
       entry.reaper = undefined;
@@ -476,7 +489,11 @@ export function createApp(deps: AppDeps): http.Server {
     const heartbeat = setInterval(() => write({ type: 'heartbeat' }), heartbeatMs);
     heartbeat.unref?.();
 
+    let cleaned = false;
     const cleanup = (): void => {
+      if (cleaned) return;
+      cleaned = true;
+      entry.streams.delete(response);
       clearInterval(heartbeat);
       unsubscribeSession();
       unsubscribeDocuments();
@@ -521,7 +538,8 @@ export function createApp(deps: AppDeps): http.Server {
       const html = (await readFile(target, 'utf8')).replace(
         '<!--PDF_JA_TOKEN-->',
         `<meta name="pdf-ja-token" content="${deps.security.token}">`,
-      );
+      ).replace('<!--PDF_JA_MODEL-->',
+        `<meta name="pdf-ja-model" content="${encodeURIComponent(deps.defaultModel)}">`);
       response.writeHead(200, {
         ...SECURITY_HEADERS,
         'content-type': type,

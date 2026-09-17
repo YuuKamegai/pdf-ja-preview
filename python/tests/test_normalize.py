@@ -383,6 +383,21 @@ def test_short_words_are_still_translated() -> None:
     assert by_id["texts-1"]["translatable"] is True
 
 
+def test_numeric_figure_text_is_still_folded_into_its_figure() -> None:
+    """訳すものが無い断片も、図の中にあるなら図へ畳む。
+
+    「訳さない」と「図に属する」は別の判断。畳み忘れると、画面の図の下ではなく
+    訳文の並びに素のまま出てきて、読む列を汚す。
+    """
+    out = normalize_document(_figure_raw(), HASH, VERSION, CONFIG, [_page()])
+    by_id = {block["id"]: block for block in out["blocks"]}
+
+    assert by_id["texts-2"]["source"] == "24"
+    assert by_id["texts-2"]["translatable"] is False
+    assert "pictures-0" in by_id["texts-2"]["relatedIds"], "図に畳まれていない"
+    assert "texts-2" in by_id["pictures-0"]["relatedIds"]
+
+
 def test_real_paper_keeps_body_text_translatable(fixtures_dir) -> None:
     """合成 fixture では図の中に文字が無いので、畳み込みは何もしない。"""
     raw = _load(fixtures_dir, "docling-two-column.json")
@@ -409,7 +424,15 @@ def _geometry_from_manifest(entry: dict) -> list[dict]:
 
 @pytest.mark.parametrize(
     "name",
-    ["two-column.pdf", "general.pdf", "cropbox.pdf", "rotated.pdf", "image-only.pdf"],
+    [
+        "two-column.pdf",
+        "general.pdf",
+        "cropbox.pdf",
+        "rotated.pdf",
+        "image-only.pdf",
+        "formula.pdf",
+        "page-spanning.pdf",
+    ],
 )
 def test_every_fixture_matches_the_manifest(fixtures_dir: Path, expected: dict, name: str) -> None:
     """manifest に記録した期待矩形を、実 Docling の出力が含んでいること。
@@ -437,3 +460,43 @@ def test_every_fixture_matches_the_manifest(fixtures_dir: Path, expected: dict, 
         got, exp = region["box"], want["box"]
         assert got[0] <= exp[0] + tolerance and got[1] <= exp[1] + tolerance, (name, want["source"], got, exp)
         assert got[2] >= exp[2] - tolerance and got[3] >= exp[3] - tolerance, (name, want["source"], got, exp)
+
+
+def test_paragraph_across_a_page_break_keeps_both_pages(fixtures_dir: Path) -> None:
+    """改ページをまたぐ段落は、両ページの領域を持つ 1 ブロックになる。
+
+    合成 fixture `page-spanning.pdf` を実 Docling に通した生出力で確かめる。
+    2 ページ分を別々のブロックにしてしまうと、訳が文の途中で切れる。
+    """
+    raw = _load(fixtures_dir, "docling-page-spanning.json")
+    out = normalize_document(
+        raw, HASH, VERSION, CONFIG, [_page(1, 612, 792), _page(2, 612, 792)]
+    )
+
+    spanning = [
+        block
+        for block in out["blocks"]
+        if block["source"].startswith("The instrument logged a reading")
+    ]
+    assert len(spanning) == 1, "またぐ段落が 1 ブロックになっていない"
+    assert sorted(region["page"] for region in spanning[0]["regions"]) == [1, 2]
+    # 2 ページ目の続きが同じ source に入っていること。
+    assert "that were themselves derived" in spanning[0]["source"]
+
+
+def test_text_drawn_formula_is_not_recognised_as_a_formula(fixtures_dir: Path) -> None:
+    """文字で描いた数式は `formula` として立たない（既知の制約）。
+
+    これは直したい挙動ではなく、**現状を固定して忘れないための試験**。
+    区切り記号の無い数式を見分けられないことは docs/pdf-web.md に明記してある。
+    立つようになったらこの試験が落ちるので、そのとき文書を直す。
+    """
+    raw = _load(fixtures_dir, "docling-formula.json")
+    out = normalize_document(raw, HASH, VERSION, CONFIG, [_page(1, 612, 792)])
+    kinds = {
+        block["source"]: block["kind"]
+        for block in out["blocks"]
+        if block["source"].startswith(("dC/dt", "D = D0"))
+    }
+    assert kinds, "数式の行が取れていない"
+    assert "formula" not in kinds.values()

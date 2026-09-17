@@ -203,6 +203,8 @@ export class Storage {
   /** 文書に紐づくものを丸ごと消す。訳文キャッシュもこの下にある。 */
   async deleteDocument(hash: string): Promise<void> {
     if (!HASH.test(hash)) throw new StorageKeyError(hash);
+    const prefix = join(this.root, 'docs', hash) + sep;
+    await Promise.allSettled([...this.#writes].filter(([path]) => path.startsWith(prefix)).map(([,write]) => write));
     await rm(join(this.root, 'docs', hash), { recursive: true, force: true });
   }
 

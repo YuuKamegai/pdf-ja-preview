@@ -30,6 +30,24 @@ async function waitUntil(predicate: () => boolean, label: string): Promise<void>
 
 const HASH = 'a'.repeat(64);
 
+test('保存待ち中のモデル変更で旧訳を新しい世代へ公開しない', async (t) => {
+  const {session, storage, scheduler, events} = await setup(t, [block('a',0,1)],
+    async (_block, config) => config.model === 'm1' ? 'OLD' : 'NEW');
+  const write = storage.writeJson.bind(storage);
+  let release!: () => void;
+  let entered!: () => void;
+  const started = new Promise<void>(resolve => {entered = resolve;});
+  const gate = new Promise<void>(resolve => {release = resolve;});
+  storage.writeJson = async (key, value) => { entered(); await gate; await write(key, value); };
+  session.start();
+  await started;
+  session.setModel('m2');
+  const generation = session.generation;
+  release();
+  await scheduler.idle();
+  assert.equal(events.some(e => e.type === 'block' && e.generation === generation && e.value.ja === 'OLD'), false);
+});
+
 const connection = { endpoint: 'http://127.0.0.1:11434', think: false, temperature: 0.2, timeoutMs: 1000 };
 
 function block(id: string, order: number, page: number, overrides: Partial<PdfBlock> = {}): PdfBlock {

@@ -48,6 +48,8 @@ export class PdfView {
   #pageNumber = 1;
   #scale = 1;
   #rotation = 0;
+  #renderGeneration = 0;
+  #textTask: pdfjs.TextLayer | undefined;
 
   constructor(host: HTMLElement) {
     host.innerHTML = '';
@@ -95,6 +97,8 @@ export class PdfView {
   async showPage(page: number, scale = this.#scale, rotation = this.#rotation): Promise<void> {
     const pdf = this.#document;
     if (!pdf) throw new Error('PDF が開かれていません');
+    const generation = ++this.#renderGeneration;
+    this.#textTask?.cancel();
 
     const clamped = Math.min(Math.max(1, Math.round(page)), pdf.numPages);
     this.#pageNumber = clamped;
@@ -103,11 +107,15 @@ export class PdfView {
 
     // 描画中にページを変えると canvas の取り合いになる。前の描画を必ず止める。
     if (this.#renderTask) {
-      this.#renderTask.cancel();
-      this.#renderTask = undefined;
+      const previous = this.#renderTask;
+      previous.cancel();
+      await previous.promise.catch(() => undefined);
+      if (this.#renderTask === previous) this.#renderTask = undefined;
     }
+    if (generation !== this.#renderGeneration) return;
 
     const pdfPage = await pdf.getPage(clamped);
+    if (generation !== this.#renderGeneration || pdf !== this.#document) return;
     this.#page = pdfPage;
 
     const viewport = pdfPage.getViewport({ scale, rotation: this.#rotation });
@@ -140,19 +148,25 @@ export class PdfView {
       if (this.#renderTask === task) this.#renderTask = undefined;
     }
 
-    await this.#renderText(pdfPage, viewport);
+    if (generation !== this.#renderGeneration) return;
+    await this.#renderText(pdfPage, viewport, generation);
+    if (generation !== this.#renderGeneration) return;
     this.highlight([]);
   }
 
-  async #renderText(page: PDFPageProxy, viewport: unknown): Promise<void> {
-    this.#textLayer.innerHTML = '';
+  async #renderText(page: PDFPageProxy, viewport: unknown, generation: number): Promise<void> {
     const content = await page.getTextContent();
+    if (generation !== this.#renderGeneration) return;
+    this.#textLayer.innerHTML = '';
     const layer = new pdfjs.TextLayer({
       textContentSource: content,
       container: this.#textLayer,
       viewport: viewport as never,
     });
-    await layer.render();
+    this.#textTask = layer;
+    try { await layer.render(); }
+    catch (error) { if (generation === this.#renderGeneration) throw error; }
+    finally { if (this.#textTask === layer) this.#textTask = undefined; }
   }
 
   geometry(): PageGeometry | undefined {
@@ -243,6 +257,9 @@ export class PdfView {
   }
 
   async #closeDocument(): Promise<void> {
+    this.#renderGeneration++;
+    this.#textTask?.cancel();
+    this.#textTask = undefined;
     if (this.#renderTask) {
       this.#renderTask.cancel();
       this.#renderTask = undefined;
@@ -257,8 +274,12 @@ export class PdfView {
     this.#document = undefined;
   }
 
-  dispose(): void {
-    void this.#closeDocument();
+  async dispose(): Promise<void> {
+    await this.#closeDocument();
+    this.#canvas.width = 0;
+    this.#canvas.height = 0;
+    this.#canvas.style.width = '0px';
+    this.#canvas.style.height = '0px';
     this.#textLayer.innerHTML = '';
     this.#overlay.innerHTML = '';
   }

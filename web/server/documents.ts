@@ -45,6 +45,8 @@ interface Entry {
   refs: number;
   controller: AbortController;
   closed: boolean;
+  cacheIdentity?: string;
+  expiry?: NodeJS.Timeout;
 }
 
 export interface DocumentStoreOptions {
@@ -52,6 +54,7 @@ export interface DocumentStoreOptions {
   extractor: Extractor;
   maxBytes?: number;
   timeoutMs?: number;
+  unusedMs?: number;
 }
 
 type Listener = (job: ExtractionJob) => void;
@@ -61,6 +64,7 @@ export class DocumentStore {
   #extractor: Extractor;
   #maxBytes: number;
   #timeoutMs: number | undefined;
+  #unusedMs: number;
 
   #entries = new Map<string, Entry>();
   #listeners = new Set<Listener>();
@@ -69,13 +73,14 @@ export class DocumentStore {
   #running: Entry | undefined;
   /** 同じ PDF を同時に登録しても抽出は一度だけ。 */
   #inFlight = new Map<string, Promise<PdfDocument>>();
-  #idleResolve: (() => void) | undefined;
+  #idleWaiters: Array<() => void> = [];
 
   constructor(options: DocumentStoreOptions) {
     this.#storage = options.storage;
     this.#extractor = options.extractor;
     this.#maxBytes = options.maxBytes ?? MAX_UPLOAD_BYTES;
     this.#timeoutMs = options.timeoutMs;
+    this.#unusedMs = options.unusedMs ?? 5 * 60_000;
   }
 
   onChange(listener: Listener): () => void {
@@ -96,6 +101,7 @@ export class DocumentStore {
 
   get(id: string): ExtractionJob | undefined {
     const entry = this.#entries.get(id);
+    if (entry && entry.refs === 0) this.#armExpiry(entry);
     return entry ? toJob(entry) : undefined;
   }
 
@@ -112,6 +118,7 @@ export class DocumentStore {
     const entry = this.#entries.get(id);
     if (!entry || entry.closed) return false;
     entry.refs += 1;
+    clearTimeout(entry.expiry);
     return true;
   }
 
@@ -145,10 +152,19 @@ export class DocumentStore {
   async #close(entry: Entry): Promise<void> {
     if (entry.closed) return;
     entry.closed = true;
+    clearTimeout(entry.expiry);
     entry.controller.abort();
     this.#queue = this.#queue.filter((queued) => queued !== entry);
     this.#entries.delete(entry.id);
     await this.#storage.removeTempFile(entry.file);
+  }
+
+  #armExpiry(entry: Entry): void {
+    clearTimeout(entry.expiry);
+    entry.expiry = setTimeout(() => {
+      if (entry.refs === 0) void this.#close(entry).catch(() => undefined);
+    }, this.#unusedMs);
+    entry.expiry.unref();
   }
 
   /**
@@ -204,8 +220,13 @@ export class DocumentStore {
       closed: false,
     };
     this.#entries.set(entry.id, entry);
+    this.#armExpiry(entry);
 
-    const cached = await this.#readCache(entry.hash);
+    try {
+      entry.cacheIdentity = this.#extractor.cacheIdentity
+        ? await this.#extractor.cacheIdentity() : this.#extractor.description;
+    } catch { /* 環境を検証できない場合はキャッシュを採用しない。抽出が具体的なエラーを返す。 */ }
+    const cached = await this.#readCache(entry.hash, entry.cacheIdentity);
     if (cached) {
       this.#settle(entry, cached);
       return toJob(entry);
@@ -218,11 +239,15 @@ export class DocumentStore {
     return toJob(entry);
   }
 
-  async #readCache(hash: string): Promise<PdfDocument | undefined> {
+  async #readCache(hash: string, identity?: string): Promise<PdfDocument | undefined> {
+    if (!identity) return undefined;
+    const meta = await this.#storage.readJson(documentKey(hash, 'extraction-meta')) as {identity?: string} | undefined;
+    if (meta?.identity !== identity) return undefined;
     const raw = await this.#storage.readJson(documentKey(hash, 'document'));
     if (raw === undefined) return undefined;
     try {
-      return parseDocument(raw);
+      const document = parseDocument(raw);
+      return document.hash === hash ? document : undefined;
     } catch {
       // 壊れたキャッシュは捨てて取り直す。
       await this.#storage.deleteDocument(hash);
@@ -240,8 +265,7 @@ export class DocumentStore {
     if (this.#running !== undefined) return;
     const next = this.#queue.shift();
     if (next === undefined) {
-      this.#idleResolve?.();
-      this.#idleResolve = undefined;
+      for (const resolve of this.#idleWaiters.splice(0)) resolve();
       return;
     }
     if (next.closed) {
@@ -260,6 +284,10 @@ export class DocumentStore {
     this.#emit(entry);
 
     try {
+      // FIFO に待機している間に、同じ文書の抽出が完了している場合がある。
+      const cached = await this.#readCache(entry.hash, entry.cacheIdentity);
+      if (entry.closed) return;
+      if (cached) { this.#settle(entry, cached); return; }
       let pending = this.#inFlight.get(entry.hash);
       if (pending === undefined) {
         pending = this.#extractor.run({
@@ -276,6 +304,8 @@ export class DocumentStore {
       if (entry.closed || entry.controller.signal.aborted) return;
       // 取り消された結果は保存しない。
       await this.#storage.writeJson(documentKey(entry.hash, 'document'), document);
+      await this.#storage.writeJson(documentKey(entry.hash, 'extraction-meta'), {identity:entry.cacheIdentity});
+      if (entry.closed || entry.controller.signal.aborted) return;
       this.#settle(entry, document);
     } catch (error) {
       if (entry.closed) return;
@@ -290,7 +320,7 @@ export class DocumentStore {
   async idle(): Promise<void> {
     while (this.#running !== undefined || this.#queue.length > 0) {
       await new Promise<void>((resolve) => {
-        this.#idleResolve = resolve;
+        this.#idleWaiters.push(resolve);
       });
     }
   }
@@ -309,6 +339,7 @@ export class DocumentStore {
       await this.#close(entry);
     }
     this.#listeners.clear();
+    await this.idle();
   }
 }
 

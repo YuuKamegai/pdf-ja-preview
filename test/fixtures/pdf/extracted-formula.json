@@ -1,0 +1,140 @@
+{
+ "schema": "pdf-document.v1",
+ "hash": "2f6a7e1df3615d478ccc96cea1494f80202c5c5c70c1631c9ee90a2216a68a10",
+ "extractor": {
+  "version": "docling-1",
+  "configHash": "76b9d7a0ee7dd854b0a2aabac7edbbf0f1b5399ea86f23bdb05f57f8c01c56a9"
+ },
+ "pages": [
+  {
+   "number": 1,
+   "width": 612,
+   "height": 792,
+   "rotation": 0,
+   "status": "ok"
+  }
+ ],
+ "blocks": [
+  {
+   "id": "texts-0",
+   "kind": "heading",
+   "order": 0,
+   "source": "Diffusion of the Tracer",
+   "headingContext": "",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.117647,
+      0.077828,
+      0.466275,
+      0.101187
+     ],
+     "charRange": [
+      0,
+      23
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-1",
+   "kind": "paragraph",
+   "order": 1,
+   "source": "The tracer spreads according to the diffusion equation below. The coefficient D was measured for each temperature.",
+   "headingContext": "Diffusion of the Tracer",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.117647,
+      0.150381,
+      0.604181,
+      0.180905
+     ],
+     "charRange": [
+      0,
+      114
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-2",
+   "kind": "paragraph",
+   "order": 2,
+   "source": "dC/dt = D * d2C/dx2 + k * C",
+   "headingContext": "Diffusion of the Tracer",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.355453,
+      0.235107,
+      0.644547,
+      0.251404
+     ],
+     "charRange": [
+      0,
+      27
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-3",
+   "kind": "heading",
+   "order": 3,
+   "source": "D = D0 * exp(-Ea / (R * T))",
+   "headingContext": "Diffusion of the Tracer",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.362402,
+      0.280562,
+      0.637598,
+      0.296859
+     ],
+     "charRange": [
+      0,
+      27
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-4",
+   "kind": "paragraph",
+   "order": 4,
+   "source": "Here C is the concentration and t is time in seconds. The activation energy Ea was 42.5 kJ per mole in every run.",
+   "headingContext": "D = D0 * exp(-Ea / (R * T))",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.117647,
+      0.347351,
+      0.595158,
+      0.377875
+     ],
+     "charRange": [
+      0,
+      113
+     ]
+    }
+   ],
+   "relatedIds": []
+  }
+ ],
+ "warnings": []
+}

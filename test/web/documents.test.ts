@@ -10,6 +10,46 @@ import type { PdfDocument } from '../../web/shared/document';
 
 const WORKER = fileURLToPath(new URL('./helpers/fake-worker.mjs', import.meta.url));
 
+test('抽出器の構成が変わったら同じ PDF も抽出し直す', async (t) => {
+  const { store, storage } = await setup(t, fakeExtractor('ok'));
+  await store.register(bytesOf('%PDF-1.7 versioned'), 'a.pdf');
+  await store.idle();
+  let runs = 0;
+  const updated = new DocumentStore({storage, extractor: {
+    description: 'updated-extractor',
+    async run(args) { runs++; return fakeExtractor('ok').run(args); },
+  }});
+  try {
+    await updated.register(bytesOf('%PDF-1.7 versioned'), 'b.pdf');
+    await updated.idle();
+    assert.equal(runs, 1);
+  } finally { await updated.close(); }
+});
+
+test('抽出待ちの同じ PDF は先行ジョブの結果を再利用する', async (t) => {
+  let runs = 0;
+  const { store } = await setup(t, {description:'same', async run(args) {
+    runs++; return fakeExtractor('slow', ['--delay','100']).run(args);
+  }});
+  await store.register(bytesOf('%PDF-1.7 duplicate'), 'a.pdf');
+  await store.register(bytesOf('%PDF-1.7 duplicate'), 'b.pdf');
+  await store.idle();
+  assert.equal(runs, 1);
+});
+
+test('同名の抽出器でもイメージ指紋が変わればキャッシュを無効にする', async (t) => {
+  let image = 'image-one';
+  let runs = 0;
+  const {store} = await setup(t, {description:'same-tag', cacheIdentity:async () => image,
+    async run(args) {runs++; return fakeExtractor('ok').run(args);}});
+  await store.register(bytesOf('%PDF-1.7 fingerprint'), 'a.pdf');
+  await store.idle();
+  image = 'image-two';
+  await store.register(bytesOf('%PDF-1.7 fingerprint'), 'a.pdf');
+  await store.idle();
+  assert.equal(runs, 2);
+});
+
 function fakeExtractor(mode: string, extra: string[] = []): Extractor {
   return dockerExtractorLike(mode, extra);
 }
@@ -38,7 +78,7 @@ async function* bytesOf(text: string, chunks = 1): AsyncGenerator<Uint8Array> {
   }
 }
 
-async function setup(t: { after: (fn: () => unknown) => void }, extractor: Extractor, options: { maxBytes?: number } = {}) {
+async function setup(t: { after: (fn: () => unknown) => void }, extractor: Extractor, options: { maxBytes?: number; unusedMs?: number } = {}) {
   const storage: Storage = await createTemporaryStorage();
   const store = new DocumentStore({ storage, extractor, ...options });
   t.after(async () => {
@@ -47,6 +87,15 @@ async function setup(t: { after: (fn: () => unknown) => void }, extractor: Extra
   });
   return { storage, store };
 }
+
+test('セッションを作らず放置された文書を期限後に回収する', async (t) => {
+  const {store} = await setup(t, fakeExtractor('ok'), {unusedMs:50});
+  const job = await store.register(bytesOf('%PDF-1.7 abandoned'), 'a.pdf');
+  const path = store.pdfPath(job.id)!;
+  await new Promise(resolve => setTimeout(resolve,150));
+  assert.equal(store.get(job.id), undefined);
+  assert.equal(await exists(path), false);
+});
 
 test('register はキューに載せた時点で返り、抽出を待たない', async (t) => {
   const { store } = await setup(t, fakeExtractor('slow', ['--delay', '400']));

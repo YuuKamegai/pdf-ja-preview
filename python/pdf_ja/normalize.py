@@ -394,18 +394,20 @@ class _Normalizer:
         for block in self.blocks:
             if block["kind"] in ("picture", "table", "caption", "furniture"):
                 continue
-            if not block["translatable"] or not block["regions"]:
+            if not block["regions"]:
                 continue
-
+            # 「訳さない」と「図に属する」は別の判断。目盛りのような訳すものが
+            # 無い断片も、図の中にあるなら図へ畳む。畳まないと訳文の並びに素の
+            # まま出てきて読む列を汚す。
             parent = self._container_of(block, containers)
             if parent is None:
                 continue
+            folded += 1
             block["translatable"] = False
             if parent["id"] not in block["relatedIds"]:
                 block["relatedIds"].append(parent["id"])
             if block["id"] not in parent["relatedIds"]:
                 parent["relatedIds"].append(block["id"])
-            folded += 1
 
         if folded:
             self.warnings.append(

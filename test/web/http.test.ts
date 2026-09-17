@@ -20,6 +20,38 @@ import type { ServerEvent, Snapshot } from '../../web/shared/protocol';
 const WORKER = fileURLToPath(new URL('./helpers/fake-worker.mjs', import.meta.url));
 const PDF_BYTES = Buffer.from('%PDF-1.7\n% fake but non-empty\n');
 
+test('セッション削除は開いた SSE も終了する', async (t) => {
+  const {call} = await startServer(t);
+  const job = await uploadPdf(call);
+  await waitForDocument(call, job.documentId, ['ready']);
+  const created = await call('/api/sessions', {method:'POST', headers:{'content-type':'application/json'},
+    body:JSON.stringify({documentId:job.documentId,model:'m1'})});
+  const snapshot = await created.json() as Snapshot;
+  const controller = new AbortController();
+  const stream = await call(`/api/sessions/${snapshot.sessionId}/events`, {signal:controller.signal});
+  const reader = stream.body!.getReader();
+  const ended = (async () => {while (!(await reader.read()).done) {} return true;})();
+  try {
+    await call(`/api/sessions/${snapshot.sessionId}`, {method:'DELETE'});
+    assert.equal(await Promise.race([ended, new Promise(resolve => setTimeout(() => resolve(false), 250))]), true);
+  } finally {controller.abort(); await ended.catch(() => undefined);}
+});
+
+test('サーバー終了は閲覧中の SSE を閉じて完了する', async (t) => {
+  const {server, call} = await startServer(t);
+  const job = await uploadPdf(call);
+  await waitForDocument(call, job.documentId, ['ready']);
+  const created = await call('/api/sessions', {method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({documentId:job.documentId,model:'m1'})});
+  const snapshot = await created.json() as Snapshot;
+  const stream = await call(`/api/sessions/${snapshot.sessionId}/events`);
+  const consumed = stream.text().catch(() => '');
+  try {
+    const done = server.shutdown().then(() => true);
+    assert.equal(await Promise.race([done, new Promise(resolve => setTimeout(() => resolve(false),1000))]),true);
+  } finally {server.closeAllConnections(); await consumed;}
+});
+
 function fakeExtractor(mode = 'ok'): Extractor {
   return {
     description: `fake:${mode}`,
@@ -48,7 +80,7 @@ async function startServer(
   const staticRoot = await mkdtemp(join(tmpdir(), 'pdf-ja-static-'));
   await writeFile(
     join(staticRoot, 'index.html'),
-    '<!doctype html><html><head><!--PDF_JA_TOKEN--></head><body>ok</body></html>',
+    '<!doctype html><html><head><!--PDF_JA_TOKEN--><!--PDF_JA_MODEL--></head><body>ok</body></html>',
     'utf8',
   );
   await writeFile(join(staticRoot, 'app.js'), 'console.log(1);\n', 'utf8');
@@ -447,6 +479,12 @@ test('キャッシュ削除は世代を上げ、実行中の結果で復活さ�
   assert.ok(first.type === 'snapshot');
   assert.ok(first.value.generation > snapshot.generation, '世代が上がっている');
   void storage;
+});
+
+test('起動 HTML に設定された既定モデルを渡す', async (t) => {
+  const {base} = await startServer(t);
+  const html = await (await fetch(base)).text();
+  assert.match(html, /name="pdf-ja-model" content="m1"/);
 });
 
 test('存在しない道筋は 404', async (t) => {

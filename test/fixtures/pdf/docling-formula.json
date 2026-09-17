@@ -1,0 +1,193 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/texts/0"
+      },
+      {
+        "$ref": "#/texts/1"
+      },
+      {
+        "$ref": "#/texts/2"
+      },
+      {
+        "$ref": "#/texts/3"
+      },
+      {
+        "$ref": "#/texts/4"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "formula",
+  "origin": {
+    "binary_hash": 11450694669091375632,
+    "filename": "formula.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 792.0,
+        "width": 612.0
+      }
+    }
+  },
+  "pictures": [],
+  "schema_name": "DoclingDocument",
+  "tables": [],
+  "texts": [
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 1,
+      "orig": "Diffusion of the Tracer",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 711.86,
+            "coord_origin": "BOTTOMLEFT",
+            "l": 72.0,
+            "r": 285.35999999999996,
+            "t": 730.36
+          },
+          "charspan": [
+            0,
+            23
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/0",
+      "text": "Diffusion of the Tracer"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "The tracer spreads according to the diffusion equation below. The coefficient D was measured for each temperature.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 648.723,
+            "coord_origin": "BOTTOMLEFT",
+            "l": 72.0,
+            "r": 369.75899999999996,
+            "t": 672.898
+          },
+          "charspan": [
+            0,
+            114
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/1",
+      "text": "The tracer spreads according to the diffusion equation below. The coefficient D was measured for each temperature."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "dC/dt = D * d2C/dx2 + k * C",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 592.887972181552,
+            "coord_origin": "BOTTOMLEFT",
+            "l": 217.5375,
+            "r": 394.4625,
+            "t": 605.795
+          },
+          "charspan": [
+            0,
+            27
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/2",
+      "text": "dC/dt = D * d2C/dx2 + k * C"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 1,
+      "orig": "D = D0 * exp(-Ea / (R * T))",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 556.887972181552,
+            "coord_origin": "BOTTOMLEFT",
+            "l": 221.79,
+            "r": 390.2100000000001,
+            "t": 569.795
+          },
+          "charspan": [
+            0,
+            27
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/3",
+      "text": "D = D0 * exp(-Ea / (R * T))"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Here C is the concentration and t is time in seconds. The activation energy Ea was 42.5 kJ per mole in every run.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 492.723,
+            "coord_origin": "BOTTOMLEFT",
+            "l": 72.0,
+            "r": 364.237,
+            "t": 516.898
+          },
+          "charspan": [
+            0,
+            113
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/4",
+      "text": "Here C is the concentration and t is time in seconds. The activation energy Ea was 42.5 kJ per mole in every run."
+    }
+  ],
+  "version": "1.10.0"
+}

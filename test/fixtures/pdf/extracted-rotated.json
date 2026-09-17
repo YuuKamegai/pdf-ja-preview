@@ -102,7 +102,10 @@
      ]
     }
    ],
-   "relatedIds": []
+   "relatedIds": [
+    "texts-2",
+    "texts-3"
+   ]
   },
   {
    "id": "texts-2",
@@ -110,7 +113,7 @@
    "order": 3,
    "source": "Rotation page 1",
    "headingContext": "Body text of page 0.",
-   "translatable": true,
+   "translatable": false,
    "regions": [
     {
      "page": 2,
@@ -126,7 +129,9 @@
      ]
     }
    ],
-   "relatedIds": []
+   "relatedIds": [
+    "pictures-0"
+   ]
   },
   {
    "id": "texts-3",
@@ -134,7 +139,7 @@
    "order": 4,
    "source": "Body text of page 1.",
    "headingContext": "Body text of page 0.",
-   "translatable": true,
+   "translatable": false,
    "regions": [
     {
      "page": 2,
@@ -150,7 +155,9 @@
      ]
     }
    ],
-   "relatedIds": []
+   "relatedIds": [
+    "pictures-0"
+   ]
   },
   {
    "id": "texts-4",
@@ -249,5 +256,7 @@
    "relatedIds": []
   }
  ],
- "warnings": []
+ "warnings": [
+  "図や表の中の文字 2 件は訳しません（原文の切り抜きで見てください）"
+ ]
 }

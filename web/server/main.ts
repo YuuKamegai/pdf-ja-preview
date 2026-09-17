@@ -144,7 +144,7 @@ export async function startServer(settings: ServerSettings): Promise<RunningServ
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await server.shutdown();
     scheduler.close();
     await documents.close();
     await storage.close();

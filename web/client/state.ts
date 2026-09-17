@@ -5,7 +5,7 @@
  * これを怠ると、モデルを変えた後に古い訳が遅れて届いて表示が巻き戻る。
  */
 
-import type { TranslationState } from '../shared/document';
+import type { PdfDocument, TranslationState } from '../shared/document';
 import type { ServerEvent, Snapshot } from '../shared/protocol';
 
 export function reduceEvent(state: Snapshot, event: ServerEvent): Snapshot {
@@ -70,14 +70,26 @@ export interface Counts {
   pending: number;
 }
 
-export function countStates(state: Snapshot): Counts {
+/**
+ * 進み具合を数える。
+ *
+ * 分母は**文書の訳す対象の数**で、状態からは出さない。実文書では 3,701 ブロック
+ * 中 311 件しか訳す対象が無いので、全ブロックを分母にすると「7 / 3701」と出て
+ * いつまでも終わらないように見える。一方、実行中の数を分母にすると、一時停止で
+ * 待機に戻った分が消えて「7 / 7」になり、終わったように見える。
+ */
+export function countStates(state: Snapshot, document: PdfDocument): Counts {
   let translated = 0;
   let failed = 0;
   let pending = 0;
+  const wanted = new Set(
+    document.blocks.filter((block) => block.translatable).map((block) => block.id),
+  );
   for (const block of state.blocks) {
+    if (!wanted.has(block.id)) continue;
     if (block.status === 'translated') translated += 1;
     else if (block.status === 'error') failed += 1;
     else if (block.status === 'queued' || block.status === 'translating') pending += 1;
   }
-  return { total: state.blocks.length, translated, failed, pending };
+  return { total: wanted.size, translated, failed, pending };
 }

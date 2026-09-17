@@ -80,8 +80,8 @@ export class Api {
     return (await response.json()) as DocumentAccepted;
   }
 
-  async getDocument(id: string): Promise<DocumentStatus> {
-    const response = await this.#call(`/api/documents/${encodeURIComponent(id)}`);
+  async getDocument(id: string, signal?: AbortSignal): Promise<DocumentStatus> {
+    const response = await this.#call(`/api/documents/${encodeURIComponent(id)}`, {signal});
     const body = (await response.json()) as { state: ExtractionState; document?: unknown; error?: never };
     const status: DocumentStatus = { state: body.state };
     if (body.document !== undefined) status.document = parseDocument(body.document);
@@ -98,7 +98,8 @@ export class Api {
   ): Promise<DocumentStatus> {
     for (;;) {
       if (signal.aborted) throw new ApiError(0, 'cancelled', '取り消されました');
-      const status = await this.getDocument(id);
+      const status = await this.getDocument(id, signal);
+      if (signal.aborted) throw new ApiError(0, 'cancelled', '取り消されました');
       onState(status.state);
       if (status.state === 'ready' || status.state === 'partial' || status.state === 'error') {
         return status;

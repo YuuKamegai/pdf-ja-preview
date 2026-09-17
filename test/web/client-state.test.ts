@@ -151,6 +151,16 @@ test('heartbeat と document は状態を変えない', () => {
   );
 });
 
+/** 訳す対象 4 件 + 訳さない図の断片 1 件。 */
+function countable(): PdfDocument {
+  const doc = document([
+    block('a', 0, []), block('b', 1, []), block('c', 2, []), block('d', 3, []),
+    block('e', 4, []),
+  ]);
+  doc.blocks[4].translatable = false;
+  return doc;
+}
+
 test('進み具合を数えられる', () => {
   const counts = countStates(
     snapshot({
@@ -162,8 +172,31 @@ test('進み具合を数えられる', () => {
         { id: 'e', sourceHash: 'h', status: 'source' },
       ],
     }),
+    countable(),
   );
-  assert.deepEqual(counts, { total: 5, translated: 1, failed: 1, pending: 2 });
+  // 分母は文書の「訳す対象」の数。訳さないブロックを混ぜない。実文書では
+  // 3,701 ブロック中 311 件しか訳す対象が無く、「7 / 3701」と出ると
+  // いつまでも終わらないように見える。
+  assert.deepEqual(counts, { total: 4, translated: 1, failed: 1, pending: 2 });
+});
+
+test('一時停止で待機に戻っても分母は減らない', () => {
+  // 取り消されたブロックは source に戻る。分母を実行中の数から出すと、
+  // 止めた瞬間に「7 / 7」になって終わったように見える。
+  const counts = countStates(
+    snapshot({
+      blocks: [
+        { id: 'a', sourceHash: 'h', status: 'translated', ja: 'x' },
+        { id: 'b', sourceHash: 'h', status: 'source' },
+        { id: 'c', sourceHash: 'h', status: 'source' },
+        { id: 'd', sourceHash: 'h', status: 'source' },
+        { id: 'e', sourceHash: 'h', status: 'source' },
+      ],
+      paused: true,
+    }),
+    countable(),
+  );
+  assert.deepEqual(counts, { total: 4, translated: 1, failed: 0, pending: 0 });
 });
 
 // ---- 位置 -----------------------------------------------------------------

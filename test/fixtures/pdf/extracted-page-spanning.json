@@ -1,0 +1,112 @@
+{
+ "schema": "pdf-document.v1",
+ "hash": "763f009a3847505a3bd4a857d50e484451326e5a50c42ae25ac7c4ad1005865b",
+ "extractor": {
+  "version": "docling-1",
+  "configHash": "76b9d7a0ee7dd854b0a2aabac7edbbf0f1b5399ea86f23bdb05f57f8c01c56a9"
+ },
+ "pages": [
+  {
+   "number": 1,
+   "width": 612,
+   "height": 792,
+   "rotation": 0,
+   "status": "ok"
+  },
+  {
+   "number": 2,
+   "width": 612,
+   "height": 792,
+   "rotation": 0,
+   "status": "ok"
+  }
+ ],
+ "blocks": [
+  {
+   "id": "texts-0",
+   "kind": "heading",
+   "order": 0,
+   "source": "Continuous Record",
+   "headingContext": "",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.117647,
+      0.077828,
+      0.42085,
+      0.101187
+     ],
+     "charRange": [
+      0,
+      17
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-1",
+   "kind": "paragraph",
+   "order": 1,
+   "source": "The instrument logged a reading every thirty seconds for the whole campaign, and the operator confirmed that the pump stayed within its rated range on each of the fourteen days that the campaign lasted. No interruption was recorded in the primary channel, although the secondary channel was offline for two hours on the seventh day while the filter was replaced, and the gap was later filled by interpolating between the two neighbouring readings, which differed by less than 0.3 percent, so the correction changed none of the reported totals and the campaign was therefore treated as a single uninterrupted record for the purposes of the analysis that follows in the next section of this report, where the daily means are compared against the reference values that the laboratory published before the campaign began and that were themselves derived from an earlier campaign carried out at the same site under comparable conditions three years previously.",
+   "headingContext": "Continuous Record",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 1,
+     "box": [
+      0.117647,
+      0.150381,
+      0.677083,
+      0.357673
+     ],
+     "charRange": [
+      0,
+      820
+     ]
+    },
+    {
+     "page": 2,
+     "box": [
+      0.117647,
+      0.099876,
+      0.665059,
+      0.1304
+     ],
+     "charRange": [
+      821,
+      955
+     ]
+    }
+   ],
+   "relatedIds": []
+  },
+  {
+   "id": "texts-2",
+   "kind": "paragraph",
+   "order": 2,
+   "source": "The comparison is summarised in the following paragraph.",
+   "headingContext": "Continuous Record",
+   "translatable": true,
+   "regions": [
+    {
+     "page": 2,
+     "box": [
+      0.117647,
+      0.195836,
+      0.583134,
+      0.208683
+     ],
+     "charRange": [
+      0,
+      56
+     ]
+    }
+   ],
+   "relatedIds": []
+  }
+ ],
+ "warnings": []
+}

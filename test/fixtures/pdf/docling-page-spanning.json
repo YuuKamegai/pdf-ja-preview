@@ -1,0 +1,153 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/texts/0"
+      },
+      {
+        "$ref": "#/texts/1"
+      },
+      {
+        "$ref": "#/texts/2"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "page-spanning",
+  "origin": {
+    "binary_hash": 6541413231356118619,
+    "filename": "page-spanning.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 792.0,
+        "width": 612.0
+      }
+    },
+    "2": {
+      "page_no": 2,
+      "size": {
+        "height": 792.0,
+        "width": 612.0
+      }
+    }
+  },
+  "pictures": [],
+  "schema_name": "DoclingDocument",
+  "tables": [],
+  "texts": [
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 1,
+      "orig": "Continuous Record",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 711.86,
+            "coord_origin": "BOTTOMLEFT",
+            "l": 72.0,
+            "r": 257.56,
+            "t": 730.36
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/0",
+      "text": "Continuous Record"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "The instrument logged a reading every thirty seconds for the whole campaign, and the operator confirmed that the pump stayed within its rated range on each of the fourteen days that the campaign lasted. No interruption was recorded in the primary channel, although the secondary channel was offline for two hours on the seventh day while the filter was replaced, and the gap was later filled by interpolating between the two neighbouring readings, which differed by less than 0.3 percent, so the correction changed none of the reported totals and the campaign was therefore treated as a single uninterrupted record for the purposes of the analysis that follows in the next section of this report, where the daily means are compared against the reference values that the laboratory published before the campaign began and that were themselves derived from an earlier campaign carried out at the same site under comparable conditions three years previously.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 508.723,
+            "coord_origin": "BOTTOMLEFT",
+            "l": 72.0,
+            "r": 414.37499999999994,
+            "t": 672.898
+          },
+          "charspan": [
+            0,
+            820
+          ],
+          "page_no": 1
+        },
+        {
+          "bbox": {
+            "b": 688.723,
+            "coord_origin": "BOTTOMLEFT",
+            "l": 72.0,
+            "r": 407.016,
+            "t": 712.898
+          },
+          "charspan": [
+            821,
+            955
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/1",
+      "text": "The instrument logged a reading every thirty seconds for the whole campaign, and the operator confirmed that the pump stayed within its rated range on each of the fourteen days that the campaign lasted. No interruption was recorded in the primary channel, although the secondary channel was offline for two hours on the seventh day while the filter was replaced, and the gap was later filled by interpolating between the two neighbouring readings, which differed by less than 0.3 percent, so the correction changed none of the reported totals and the campaign was therefore treated as a single uninterrupted record for the purposes of the analysis that follows in the next section of this report, where the daily means are compared against the reference values that the laboratory published before the campaign began and that were themselves derived from an earlier campaign carried out at the same site under comparable conditions three years previously."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "The comparison is summarised in the following paragraph.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 626.723,
+            "coord_origin": "BOTTOMLEFT",
+            "l": 72.0,
+            "r": 356.87800000000004,
+            "t": 636.898
+          },
+          "charspan": [
+            0,
+            56
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/2",
+      "text": "The comparison is summarised in the following paragraph."
+    }
+  ],
+  "version": "1.10.0"
+}
