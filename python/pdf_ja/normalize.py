@@ -13,12 +13,30 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable
 
 SCHEMA = "pdf-document.v1"
 
 #: 本文として訳す種別。
 TRANSLATABLE_KINDS = frozenset({"heading", "paragraph", "list", "caption", "footnote"})
+
+#: 訳すものがあると見なす最小の手がかり。英字が 2 つ以上続くこと。
+_HAS_WORD = re.compile(r"[A-Za-z]{2}")
+
+
+def _has_something_to_translate(source: str) -> bool:
+    """訳す中身があるか。
+
+    図の目盛り（`4.5`）、パネル記号（`a`）、記号だけ（`*`, `+`）のかたまりは、
+    図の枠が取れなかったページで本文に混ざって出てくる。LLM を呼んでも訳す
+    ものが無く、訳文側の並びを埋めて読みにくくするだけなので、原文のまま置く。
+
+    実文書 4 件（26 ページの二段組み論文、CC BY の二段組み論文、CC BY の一般
+    論文、80 ページの公的文書）で確かめた範囲では、この条件で落ちるのは図の
+    断片だけで、本文は 1 件も落ちなかった。
+    """
+    return bool(_HAS_WORD.search(source))
 
 #: Docling のラベル → 中間形式の kind。
 LABEL_TO_KIND = {
@@ -154,6 +172,17 @@ def _normalize_box(
     return [round(value, 6) for value in clamped]
 
 
+
+def _inside(inner: list[float], outer: list[float], tolerance: float) -> bool:
+    """`inner` が `outer` に収まっているか。境界は許容幅だけ甘く見る。"""
+    return (
+        inner[0] >= outer[0] - tolerance
+        and inner[1] >= outer[1] - tolerance
+        and inner[2] <= outer[2] + tolerance
+        and inner[3] <= outer[3] + tolerance
+    )
+
+
 class _Normalizer:
     def __init__(
         self,
@@ -274,7 +303,11 @@ class _Normalizer:
             # 表のセル翻訳と図中の文字は初期版の対象外。原文の切り抜きを見せる。
             source = ""
 
-        translatable = kind in TRANSLATABLE_KINDS and source != ""
+        translatable = (
+            kind in TRANSLATABLE_KINDS
+            and source != ""
+            and _has_something_to_translate(source)
+        )
 
         heading_context = " > ".join(text for _, text in self.heading_stack)
         if kind == "heading" and source:
@@ -341,6 +374,60 @@ class _Normalizer:
             regions.append(region)
         return regions
 
+    # ---- 図の中の文字 ---------------------------------------------------
+    def fold_into_figures(self) -> None:
+        """図や表の枠の中に収まる文字を、その図の一部として扱う。
+
+        実際の論文では、軸ラベルや凡例が 1〜3 文字の断片として何百個も出てくる
+        （26 ページの論文で 3,700 ブロック中 2,000 以上）。図中の文字の置き換えは
+        初期版の対象外なので、訳さずに図へ畳む。中身は図の切り抜きで読める。
+        """
+        containers = [
+            block
+            for block in self.blocks
+            if block["kind"] in ("picture", "table") and block["regions"]
+        ]
+        if not containers:
+            return
+
+        folded = 0
+        for block in self.blocks:
+            if block["kind"] in ("picture", "table", "caption", "furniture"):
+                continue
+            if not block["translatable"] or not block["regions"]:
+                continue
+
+            parent = self._container_of(block, containers)
+            if parent is None:
+                continue
+            block["translatable"] = False
+            if parent["id"] not in block["relatedIds"]:
+                block["relatedIds"].append(parent["id"])
+            if block["id"] not in parent["relatedIds"]:
+                parent["relatedIds"].append(block["id"])
+            folded += 1
+
+        if folded:
+            self.warnings.append(
+                f"図や表の中の文字 {folded} 件は訳しません（原文の切り抜きで見てください）"
+            )
+
+    @staticmethod
+    def _container_of(
+        block: dict[str, Any], containers: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
+        """すべての領域が同じ図の枠に収まっていれば、その図を返す。"""
+        tolerance = 0.004
+        for container in containers:
+            pages = {region["page"]: region["box"] for region in container["regions"]}
+            if all(
+                region["page"] in pages
+                and _inside(region["box"], pages[region["page"]], tolerance)
+                for region in block["regions"]
+            ):
+                return container
+        return None
+
     # ---- 関連付け -------------------------------------------------------
     def link_related(self) -> None:
         """図表とそのキャプション・脚注を相互に結ぶ。"""
@@ -386,6 +473,7 @@ def normalize_document(
     normalizer.walk("#/body")
     normalizer.walk("#/furniture")
     normalizer.link_related()
+    normalizer.fold_into_figures()
 
     return {
         "schema": SCHEMA,

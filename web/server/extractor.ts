@@ -8,7 +8,8 @@
  * 既定は Docker 経由。詳細は `docs/pdf-web.md`。
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, execFile, type ChildProcess } from 'node:child_process';
+import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { basename, dirname } from 'node:path';
 
@@ -42,6 +43,8 @@ export interface ExtractorRunArgs {
 
 export interface Extractor {
   readonly description: string;
+  /** 実装・依存・設定が同じ場合だけ抽出キャッシュを再利用する。 */
+  cacheIdentity?(): Promise<string>;
   run(args: ExtractorRunArgs): Promise<PdfDocument>;
 }
 
@@ -52,6 +55,8 @@ interface ProcessOptions {
   timeoutMs: number;
   /** プロセスを殺すだけでは止まらない実行形態（コンテナなど）の後始末。 */
   onCancel?: () => void;
+  /** 木ごと落とすための道具。Windows 以外では使わない。試験で差し替える。 */
+  killCommand?: string;
   env?: NodeJS.ProcessEnv;
   cwd?: string;
 }
@@ -77,26 +82,45 @@ class TailBuffer {
   }
 }
 
-function killTree(child: ChildProcess): void {
+/**
+ * 後始末のための撃ちっぱなしの起動。
+ *
+ * spawn は失敗を同期例外ではなく 'error' で知らせるので try/catch では拾えない。
+ * listener を付けないと uncaughtException になり、サーバーごと落ちる。
+ * 起動できたか・成功したかを `onFailure` で知らせ、呼び出し側が代替手段へ落とせるようにする。
+ */
+function spawnCleanup(command: string, args: string[], onFailure?: () => void): void {
+  const child = spawn(command, args, { shell: false, stdio: 'ignore', windowsHide: true });
+  child.on('error', () => onFailure?.());
+  child.on('exit', (code) => {
+    if (code !== 0) onFailure?.();
+  });
+  child.unref();
+}
+
+function killTree(child: ChildProcess, killCommand = 'taskkill'): void {
   if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
+
+  const hardKill = (): void => {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      /* すでに終わっている */
+    }
+  };
+
   if (process.platform === 'win32') {
     // Windows では子の子まで落ちない。taskkill /T で木ごと落とす。
-    try {
-      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
-        shell: false,
-        stdio: 'ignore',
-        windowsHide: true,
-      }).unref();
-      return;
-    } catch {
-      // taskkill が無ければ通常の kill に落とす
-    }
+    //
+    // spawn は失敗を同期例外ではなく 'error' で知らせる。try/catch では拾えない。
+    // listener を付けずに落とすと uncaughtException になってサーバーごと落ちるし、
+    // 落ちなければワーカーが残って 'close' が来ず、抽出が永久に返らない。
+    // taskkill が起動できない場合も、起動して失敗した場合も、直接 kill へ落とす。
+    spawnCleanup(killCommand, ['/pid', String(child.pid), '/T', '/F'], hardKill);
+    return;
   }
-  try {
-    child.kill('SIGKILL');
-  } catch {
-    /* すでに終わっている */
-  }
+
+  hardKill();
 }
 
 export function runExtractorProcess(options: ProcessOptions): Promise<PdfDocument> {
@@ -132,7 +156,7 @@ export function runExtractorProcess(options: ProcessOptions): Promise<PdfDocumen
     const stop = (error: ExtractorError): void => {
       if (failure === undefined) failure = error;
       options.onCancel?.();
-      killTree(child);
+      killTree(child, options.killCommand);
     };
 
     const timer = setTimeout(() => {
@@ -272,6 +296,12 @@ export function dockerExtractor(options: DockerExtractorOptions): Extractor {
 
   return {
     description: `docker:${options.image}`,
+    async cacheIdentity() {
+      const {stdout} = await promisify(execFile)(docker,
+        ['image', 'inspect', options.image, '--format', '{{.Id}}'],
+        {windowsHide:true, timeout:5000, maxBuffer:65536});
+      return JSON.stringify(['pdf-document.v1', stdout.trim(), options.models ?? '/models', options.threads ?? 4]);
+    },
     run({ file, hash, signal, timeoutMs }) {
       const name = `pdf-ja-${randomUUID()}`;
       const args = buildDockerArgs(options, { file, hash, containerName: name });
@@ -281,15 +311,9 @@ export function dockerExtractor(options: DockerExtractorOptions): Extractor {
         signal,
         timeoutMs: timeoutMs ?? DEFAULT_EXTRACTION_TIMEOUT_MS,
         onCancel: () => {
-          try {
-            spawn(docker, ['kill', name], {
-              shell: false,
-              stdio: 'ignore',
-              windowsHide: true,
-            }).unref();
-          } catch {
-            /* docker が無ければ何もできない */
-          }
+          // docker が無い・既にコンテナが消えている場合は何もできない。
+          // ここで落ちるとサーバーごと巻き込むので、失敗は握り潰す。
+          spawnCleanup(docker, ['kill', name]);
         },
       });
     },
@@ -307,6 +331,12 @@ export interface PythonExtractorOptions {
 export function pythonExtractor(options: PythonExtractorOptions): Extractor {
   return {
     description: `python:${options.python}`,
+    async cacheIdentity() {
+      const {stdout} = await promisify(execFile)(options.python, ['-c',
+        'import hashlib, pathlib, importlib.metadata, pdf_ja; from pdf_ja.worker import config_hash; p=pathlib.Path(pdf_ja.__file__).parent; print(hashlib.sha256(b"".join(x.read_bytes() for x in sorted(p.glob("*.py")))).hexdigest(), importlib.metadata.version("docling"), config_hash("models"))'],
+        {cwd:options.cwd, env:options.env, windowsHide:true, timeout:10000, maxBuffer:65536});
+      return JSON.stringify(['pdf-document.v1', stdout.trim(), options.models]);
+    },
     run({ file, hash, signal, timeoutMs }) {
       return runExtractorProcess({
         command: options.python,

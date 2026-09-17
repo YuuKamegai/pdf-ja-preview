@@ -6,7 +6,8 @@
     "box は [left, top, right, bottom] の 0..1、左上原点、回転適用前。",
     "レイアウト抽出の矩形は行の外接矩形より広く取られるため、照合は boxTolerance と",
     "『期待矩形を含むこと』で行う。ピクセル一致は求めない。",
-    "readingOrder は各段落の先頭に置いた目印で、人が紙面を見て決めた順。"
+    "readingOrder は各段落の先頭に置いた目印で、人が紙面を見て決めた順。",
+    "general/cropbox/rotated/image-only の manifest は scripts/create-pdf-fixtures.py の 描画位置と pypdfium2 の文字矩形から作った。どの行がどの段落かは人が紙面を見て決めた。"
   ],
   "boxTolerance": 0.03,
   "fixtures": {
@@ -23,46 +24,385 @@
           "status": "ok"
         }
       ],
-      "readingOrder": ["Title", "Left first.", "Left second.", "Right first.", "Figure caption."],
+      "readingOrder": [
+        "Title",
+        "Left first.",
+        "Left second.",
+        "Right first.",
+        "Figure caption."
+      ],
       "blocks": [
         {
           "source": "Title",
           "kind": "heading",
           "page": 1,
-          "box": [0.1006, 0.05703, 0.851517, 0.076938]
+          "box": [
+            0.1006,
+            0.05703,
+            0.851517,
+            0.076938
+          ]
         },
         {
           "source": "Left first.",
           "kind": "paragraph",
           "page": 1,
-          "box": [0.10005, 0.128738, 0.4304, 0.2089]
+          "box": [
+            0.10005,
+            0.128738,
+            0.4304,
+            0.2089
+          ]
         },
         {
           "source": "Left second.",
           "kind": "paragraph",
           "page": 1,
-          "box": [0.100167, 0.303738, 0.424867, 0.3664]
+          "box": [
+            0.100167,
+            0.303738,
+            0.424867,
+            0.3664
+          ]
         },
         {
           "source": "Right first.",
           "kind": "paragraph",
           "page": 1,
-          "box": [0.533333, 0.128738, 0.857433, 0.211475]
+          "box": [
+            0.533333,
+            0.128738,
+            0.857433,
+            0.211475
+          ]
         },
         {
           "source": "Figure caption.",
           "kind": "caption",
           "page": 1,
-          "box": [0.5338, 0.4907, 0.7871, 0.512625]
+          "box": [
+            0.5338,
+            0.4907,
+            0.7871,
+            0.512625
+          ]
         },
         {
           "source": "Preprint - page 1",
           "kind": "furniture",
           "page": 1,
-          "box": [0.451367, 0.942813, 0.547217, 0.952088]
+          "box": [
+            0.451367,
+            0.942813,
+            0.547217,
+            0.952088
+          ]
         }
       ],
-      "pictures": [{ "page": 1, "box": [0.533333, 0.3, 0.9, 0.475] }]
+      "pictures": [
+        {
+          "page": 1,
+          "box": [
+            0.533333,
+            0.3,
+            0.9,
+            0.475
+          ]
+        }
+      ]
+    },
+    "general.pdf": {
+      "pages": [
+        {
+          "number": 1,
+          "width": 612.0,
+          "height": 792.0,
+          "rotation": 0,
+          "originX": 0.0,
+          "originY": 0.0,
+          "status": "ok"
+        },
+        {
+          "number": 2,
+          "width": 612.0,
+          "height": 792.0,
+          "rotation": 0,
+          "originX": 0.0,
+          "originY": 0.0,
+          "status": "ok"
+        }
+      ],
+      "readingOrder": [
+        "Quarterly Notes",
+        "The device was calibrated",
+        "Method",
+        "Samples were held",
+        "Discussion",
+        "The second page continues"
+      ],
+      "blocks": [
+        {
+          "source": "Quarterly Notes",
+          "page": 1,
+          "box": [
+            0.119193,
+            0.075737,
+            0.385601,
+            0.101765
+          ]
+        },
+        {
+          "source": "The device was calibrated",
+          "page": 1,
+          "box": [
+            0.11806,
+            0.150242,
+            0.643544,
+            0.216287
+          ]
+        },
+        {
+          "source": "Method",
+          "page": 1,
+          "box": [
+            0.119503,
+            0.243111,
+            0.208915,
+            0.257798
+          ]
+        },
+        {
+          "source": "Samples were held",
+          "page": 1,
+          "box": [
+            0.11806,
+            0.299232,
+            0.554663,
+            0.3476
+          ]
+        },
+        {
+          "source": "Discussion",
+          "page": 2,
+          "box": [
+            0.119529,
+            0.081495,
+            0.255346,
+            0.096182
+          ]
+        },
+        {
+          "source": "The second page continues",
+          "page": 2,
+          "box": [
+            0.11806,
+            0.137616,
+            0.594619,
+            0.185831
+          ]
+        }
+      ],
+      "note": "一段組みの一般文書。見出しは本文と見分けがつく大きさにしてある。"
+    },
+    "cropbox.pdf": {
+      "pages": [
+        {
+          "number": 1,
+          "width": 600.0,
+          "height": 800.0,
+          "rotation": 0,
+          "originX": 10.0,
+          "originY": 20.0,
+          "status": "ok"
+        }
+      ],
+      "readingOrder": [
+        "Cropped Page",
+        "This page has a CropBox"
+      ],
+      "blocks": [
+        {
+          "source": "Cropped Page",
+          "page": 1,
+          "box": [
+            0.10141,
+            0.05862,
+            0.30226,
+            0.079703
+          ]
+        },
+        {
+          "source": "This page has a CropBox",
+          "page": 1,
+          "box": [
+            0.100422,
+            0.11624,
+            0.626258,
+            0.146472
+          ]
+        }
+      ],
+      "note": "MediaBox 620x840 / CropBox 10 20 610 820。box は CropBox 原点を引いた値。"
+    },
+    "rotated.pdf": {
+      "pages": [
+        {
+          "number": 1,
+          "width": 600.0,
+          "height": 800.0,
+          "rotation": 0,
+          "originX": 0.0,
+          "originY": 0.0,
+          "status": "ok"
+        },
+        {
+          "number": 2,
+          "width": 600.0,
+          "height": 800.0,
+          "rotation": 90,
+          "originX": 0.0,
+          "originY": 0.0,
+          "status": "ok"
+        },
+        {
+          "number": 3,
+          "width": 600.0,
+          "height": 800.0,
+          "rotation": 180,
+          "originX": 0.0,
+          "originY": 0.0,
+          "status": "ok"
+        },
+        {
+          "number": 4,
+          "width": 600.0,
+          "height": 800.0,
+          "rotation": 270,
+          "originX": 0.0,
+          "originY": 0.0,
+          "status": "ok"
+        }
+      ],
+      "readingOrder": [
+        "Rotation page 0",
+        "Body text of page 0.",
+        "Body text of page 1.",
+        "Rotation page 1",
+        "Rotation page 2",
+        "Body text of page 2.",
+        "Rotation page 3",
+        "Body text of page 3."
+      ],
+      "blocks": [
+        {
+          "source": "Rotation page 0",
+          "page": 1,
+          "box": [
+            0.101947,
+            0.08562,
+            0.29872,
+            0.10418
+          ]
+        },
+        {
+          "source": "Body text of page 0.",
+          "page": 1,
+          "box": [
+            0.101338,
+            0.14124,
+            0.26148,
+            0.154124
+          ]
+        },
+        {
+          "source": "Body text of page 1.",
+          "page": 2,
+          "box": [
+            0.101338,
+            0.14124,
+            0.26148,
+            0.154124
+          ]
+        },
+        {
+          "source": "Rotation page 1",
+          "page": 2,
+          "box": [
+            0.101947,
+            0.08562,
+            0.295707,
+            0.10418
+          ]
+        },
+        {
+          "source": "Rotation page 2",
+          "page": 3,
+          "box": [
+            0.101947,
+            0.08562,
+            0.298693,
+            0.10418
+          ]
+        },
+        {
+          "source": "Body text of page 2.",
+          "page": 3,
+          "box": [
+            0.101338,
+            0.14124,
+            0.26148,
+            0.154124
+          ]
+        },
+        {
+          "source": "Rotation page 3",
+          "page": 4,
+          "box": [
+            0.101947,
+            0.08562,
+            0.29888,
+            0.10418
+          ]
+        },
+        {
+          "source": "Body text of page 3.",
+          "page": 4,
+          "box": [
+            0.101338,
+            0.14124,
+            0.26148,
+            0.154124
+          ]
+        }
+      ],
+      "note": "0/90/180/270 度。box は回転前の座標なので、どのページでも同じ位置になる。"
+    },
+    "image-only.pdf": {
+      "pages": [
+        {
+          "number": 1,
+          "width": 600.0,
+          "height": 800.0,
+          "rotation": 0,
+          "originX": 0.0,
+          "originY": 0.0,
+          "status": "no-text"
+        }
+      ],
+      "readingOrder": [],
+      "blocks": [],
+      "note": "文字が無い。no-text になる。",
+      "pictures": [
+        {
+          "page": 1,
+          "box": [
+            0.166667,
+            0.375,
+            0.833333,
+            0.75
+          ]
+        }
+      ]
     }
   },
   "knownExtractorDeviations": [

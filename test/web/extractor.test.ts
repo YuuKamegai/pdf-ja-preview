@@ -96,10 +96,46 @@ test('取り消しで止める', async () => {
   assert.equal(await codeOf(promise), 'cancelled');
 });
 
+test('木を殺す道具が起動できなくても、ワーカーを残したまま固まらない', async () => {
+  // taskkill が無い・弾かれるといった状況。spawn は同期例外ではなく 'error' で失敗するので、
+  // try/catch では拾えない。拾い損ねると close が来ず、抽出が永久に返らない。
+  const controller = new AbortController();
+  const promise = runExtractorProcess({
+    command: process.execPath,
+    args: [WORKER, '--mode', 'spin'],
+    signal: controller.signal,
+    timeoutMs: 20_000,
+    killCommand: 'pdf-ja-no-such-taskkill.exe',
+  });
+  setTimeout(() => controller.abort(), 100);
+  const code = await Promise.race([
+    codeOf(promise),
+    new Promise<string>(resolve => setTimeout(() => resolve('(固まった)'), 10_000)),
+  ]);
+  assert.equal(code, 'cancelled');
+});
+
 test('最初から中断されていれば起動しない', async () => {
   const controller = new AbortController();
   controller.abort();
   assert.equal(await codeOf(run('ok', [], { signal: controller.signal })), 'cancelled');
+});
+
+test('docker が無い環境で取り消しても、後始末でプロセスごと落とさない', async () => {
+  // onCancel の `docker kill` も spawn。listener が無ければ ENOENT が uncaughtException になる。
+  const controller = new AbortController();
+  const extractor = dockerExtractor({ image: 'pdf-ja-extractor:test', docker: 'pdf-ja-no-such-docker.exe' });
+  const promise = extractor.run({
+    file: join(process.cwd(), 'test', 'fixtures', 'pdf', 'two-column.pdf'),
+    hash: 'c'.repeat(64),
+    signal: controller.signal,
+    timeoutMs: 20_000,
+  });
+  queueMicrotask(() => controller.abort());
+  const code = await codeOf(promise);
+  assert.ok(['cancelled', 'spawn-failed'].includes(code), `想定外の code: ${code}`);
+  // uncaughtException が出ていれば node:test がこの試験を失敗にする。
+  await new Promise((resolve) => setTimeout(resolve, 300));
 });
 
 test('遅いワーカーでも期限内なら成功する', async () => {

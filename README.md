@@ -1,9 +1,22 @@
 # md-ja Preview
 
-英語の Markdown を、ローカルの [Ollama](https://ollama.com/) で日本語へ逐次翻訳し、
-**別パネルに表示する** VS Code 拡張です。
+英語の文書を、ローカルの [Ollama](https://ollama.com/) で日本語へ逐次翻訳して**並べて読む**
+ための道具です。二つあります。
 
-翻訳結果はパネルに出るだけで、**日本語版のファイルは作りません**。原文ファイルも書き換えません。
+| | 対象 | 使い方 |
+|---|---|---|
+| **VS Code 拡張** | Markdown | 本 README（以下） |
+| **ローカル Web アプリ** | PDF | [docs/pdf-web.md](docs/pdf-web.md) |
+
+どちらも翻訳結果を表示するだけで、**日本語版のファイルは作りません**。原文も書き換えません。
+文書はこの machine から出ません。
+
+---
+
+## VS Code 拡張（Markdown）
+
+英語の Markdown を、ローカルの Ollama で日本語へ逐次翻訳し、**別パネルに表示する**
+VS Code 拡張です。
 
 ## 前提
 
@@ -52,6 +65,25 @@ ollama pull qwen3.5:9b-q4_K_M
 | `mdJaPreview.scrollSync` | `true` | 原文エディタと訳文パネルのスクロールを同期する。 |
 | `mdJaPreview.autoOpen` | `false` | Markdown を開いたとき自動で日本語プレビューを開く。 |
 
+---
+
+## PDF 日本語プレビュー（ローカル Web アプリ）
+
+英語の PDF を、原文と日本語訳を左右に並べて読むためのローカルアプリです。原文は PDF.js で
+そのまま描画し、段落ごとに訳を対応づけます。抽出は Docling（コンテナ）、翻訳は Ollama です。
+
+セットアップ・起動・制約・保存先・復旧方法は **[docs/pdf-web.md](docs/pdf-web.md)** を
+読んでください。実文書での検証結果は
+[docs/validation/pdf-web-initial.md](docs/validation/pdf-web-initial.md) にあります。
+
+```powershell
+pwsh -File scripts/setup-pdf.ps1   # 初回だけ（Docker Desktop を起動しておく）
+npm run build:web
+npm run start:web                  # http://127.0.0.1:7391/
+```
+
+---
+
 ## 開発
 
 ```bash
@@ -62,3 +94,16 @@ npm run test:integration # VS Code を起動して統合テスト（初回は VS
 ```
 
 VS Code でこのリポジトリを開き **F5** を押すと、拡張がロードされた別ウィンドウが起動します。
+
+PDF 側は次で確かめます。
+
+```bash
+npm run typecheck:web    # Web とブラウザ試験の型検査
+npm run test:web         # 契約・制御・API の単体試験
+npm run build:web        # dist-web/ を作る
+npm run test:e2e:web     # 実ブラウザでの試験（Edge を使う）
+```
+
+```powershell
+& ./.venv-pdf/Scripts/python.exe -m pytest python/tests -q   # 抽出の正規化と前検査
+```

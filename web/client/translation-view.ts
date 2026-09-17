@@ -50,6 +50,7 @@ export class TranslationView {
   #document: PdfDocument | undefined;
   #page = 1;
   #cropUrls = new Map<string, string>();
+  #insideFigures = new Map<string, PdfBlock[]>();
 
   constructor(host: HTMLElement, handlers: TranslationViewHandlers) {
     this.#host = host;
@@ -66,7 +67,25 @@ export class TranslationView {
     this.#page = snapshot.page;
     this.#host.innerHTML = '';
 
-    const onPage = blocksOnPage(document, snapshot.page);
+    const all = blocksOnPage(document, snapshot.page);
+    // 図の中の文字は図へ畳む。実際の論文では 1 ページに何百個も出るので、そのまま
+    // 並べると本文が埋もれる。
+    const insideFigures = new Map<string, PdfBlock[]>();
+    const containers = new Set(
+      all.filter((block) => CROPPED_KINDS.has(block.kind)).map((block) => block.id),
+    );
+    for (const block of all) {
+      if (block.translatable || CROPPED_KINDS.has(block.kind) || block.kind === 'furniture') continue;
+      const parent = block.relatedIds.find((id) => containers.has(id));
+      if (parent === undefined) continue;
+      const list = insideFigures.get(parent) ?? [];
+      list.push(block);
+      insideFigures.set(parent, list);
+    }
+    const foldedIds = new Set([...insideFigures.values()].flat().map((block) => block.id));
+    this.#insideFigures = insideFigures;
+
+    const onPage = all.filter((block) => !foldedIds.has(block.id));
     if (onPage.length === 0) {
       const empty = globalThis.document.createElement('p');
       empty.className = 'empty';
@@ -116,6 +135,8 @@ export class TranslationView {
 
     if (CROPPED_KINDS.has(block.kind)) {
       container.append(this.#renderCrop(block));
+      const inside = this.#insideFigures.get(block.id) ?? [];
+      if (inside.length > 0) container.append(this.#renderFigureText(inside));
     } else {
       container.append(this.#renderText(block, state));
     }
@@ -154,6 +175,21 @@ export class TranslationView {
       body.classList.add('source');
     }
     return body;
+  }
+
+  /** 図の中の文字。訳さないが、読めるように畳んで残す。 */
+  #renderFigureText(blocks: PdfBlock[]): HTMLElement {
+    const details = globalThis.document.createElement('details');
+    details.className = 'figure-text';
+    details.dataset.testid = 'figure-text';
+    const summary = globalThis.document.createElement('summary');
+    summary.textContent = `図の中の文字 (${blocks.length}) — 訳しません`;
+    const body = globalThis.document.createElement('p');
+    body.className = 'body source';
+    body.lang = 'en';
+    body.textContent = blocks.map((block) => block.source).join(' ');
+    details.append(summary, body);
+    return details;
   }
 
   #renderCrop(block: PdfBlock): HTMLElement {

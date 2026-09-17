@@ -234,3 +234,206 @@ def test_schema_and_hashes_are_passed_through(two_column) -> None:
     assert out["schema"] == "pdf-document.v1"
     assert out["hash"] == HASH
     assert out["extractor"] == {"version": VERSION, "configHash": CONFIG}
+
+
+def _figure_raw() -> dict:
+    """図の枠の中に小さな文字が並ぶ、実際の論文でよくある形。"""
+
+    def text(index: int, label: str, box: tuple[float, float, float, float]) -> dict:
+        left, bottom, right, top = box
+        return {
+            "self_ref": f"#/texts/{index}",
+            "label": "text",
+            "content_layer": "body",
+            "parent": {"$ref": "#/body"},
+            "text": label,
+            "prov": [
+                {
+                    "page_no": 1,
+                    "charspan": [0, len(label)],
+                    "bbox": {
+                        "l": left, "b": bottom, "r": right, "t": top,
+                        "coord_origin": "BOTTOMLEFT",
+                    },
+                }
+            ],
+        }
+
+    return {
+        "schema_name": "DoclingDocument",
+        "body": {
+            "self_ref": "#/body",
+            "children": [
+                {"$ref": "#/texts/0"},
+                {"$ref": "#/pictures/0"},
+                {"$ref": "#/texts/1"},
+                {"$ref": "#/texts/2"},
+                {"$ref": "#/texts/3"},
+            ],
+        },
+        "furniture": {"self_ref": "#/furniture", "children": []},
+        "groups": [],
+        "texts": [
+            text(0, "Body paragraph outside the figure.", (60, 700, 500, 720)),
+            # 図の中の軸ラベルと凡例
+            text(1, "NS", (120, 420, 140, 432)),
+            text(2, "24", (200, 420, 220, 432)),
+            text(3, "Figure 1 | The caption below the figure.", (60, 360, 500, 380)),
+        ],
+        "pictures": [
+            {
+                "self_ref": "#/pictures/0",
+                "label": "picture",
+                "content_layer": "body",
+                "parent": {"$ref": "#/body"},
+                "children": [],
+                "captions": [{"$ref": "#/texts/3"}],
+                "footnotes": [],
+                "prov": [
+                    {
+                        "page_no": 1,
+                        "charspan": [0, 0],
+                        "bbox": {"l": 80, "b": 400, "r": 520, "t": 660, "coord_origin": "BOTTOMLEFT"},
+                    }
+                ],
+            }
+        ],
+        "tables": [],
+        "pages": {"1": {"page_no": 1, "size": {"width": 600.0, "height": 800.0}}},
+    }
+
+
+def test_text_inside_a_figure_is_not_translated() -> None:
+    """図中の文字の置き換えは対象外。訳さずに図へ畳む。"""
+    out = normalize_document(_figure_raw(), HASH, VERSION, CONFIG, [_page()])
+    by_id = {block["id"]: block for block in out["blocks"]}
+
+    assert by_id["texts-1"]["translatable"] is False, "軸ラベルは訳さない"
+    assert by_id["texts-2"]["translatable"] is False
+    assert by_id["texts-0"]["translatable"] is True, "図の外の本文は訳す"
+    assert by_id["texts-3"]["translatable"] is True, "キャプションは訳す"
+    assert any("図や表の中の文字" in warning for warning in out["warnings"])
+
+
+def test_figure_text_is_linked_to_its_figure() -> None:
+    out = normalize_document(_figure_raw(), HASH, VERSION, CONFIG, [_page()])
+    by_id = {block["id"]: block for block in out["blocks"]}
+    assert "pictures-0" in by_id["texts-1"]["relatedIds"]
+    assert "texts-1" in by_id["pictures-0"]["relatedIds"]
+
+
+def _axis_labels_raw() -> dict:
+    """図の枠が取れなかったページ。目盛りとパネル記号だけが素の文字として出てくる。
+
+    実文書（Nature Aging 2024、26 ページ）の 6 ページ目がこの形だった。図の
+    picture が立たないので「図へ畳む」が効かず、"a" や "4.5" が訳す対象に残る。
+    """
+    texts = ["a", "4.5", "3.0", "*", "+", "24", "Age (months)", "Shannon index"]
+    return {
+        "schema_name": "DoclingDocument",
+        "body": {"children": [{"$ref": f"#/texts/{i}"} for i in range(len(texts))]},
+        "furniture": {"children": []},
+        "groups": [],
+        "texts": [
+            {
+                "self_ref": f"#/texts/{i}",
+                "label": "text",
+                "text": text,
+                "prov": [
+                    {
+                        "page_no": 1,
+                        "charspan": [0, len(text)],
+                        "bbox": {"l": 80, "b": 700 - i * 10, "r": 140,
+                                 "t": 710 - i * 10, "coord_origin": "BOTTOMLEFT"},
+                    }
+                ],
+            }
+            for i, text in enumerate(texts)
+        ],
+        "pictures": [],
+        "tables": [],
+        "pages": {"1": {"page_no": 1, "size": {"width": 600.0, "height": 800.0}}},
+    }
+
+
+def test_axis_ticks_and_panel_letters_are_not_queued_for_translation() -> None:
+    """訳すものが無い断片は訳す対象にしない。
+
+    目盛り・パネル記号・記号だけのかたまりは、LLM を呼んでも意味が無く、
+    訳文側の並びを埋めるだけになる。英字が 2 つ続かないものは訳さない。
+    """
+    out = normalize_document(_axis_labels_raw(), HASH, VERSION, CONFIG, [_page()])
+    by_id = {block["id"]: block for block in out["blocks"]}
+
+    for ref, text in ((0, "a"), (1, "4.5"), (2, "3.0"), (3, "*"), (4, "+"), (5, "24")):
+        assert by_id[f"texts-{ref}"]["translatable"] is False, f"{text!r} に訳すものは無い"
+
+    assert by_id["texts-6"]["translatable"] is True, "Age (months) は訳す"
+    assert by_id["texts-7"]["translatable"] is True, "Shannon index は訳す"
+
+
+def test_short_words_are_still_translated() -> None:
+    """短いだけの本文を落とさない。"""
+    raw = _axis_labels_raw()
+    raw["texts"][0]["text"] = "Go"
+    raw["texts"][1]["text"] = "No. 5"
+    out = normalize_document(raw, HASH, VERSION, CONFIG, [_page()])
+    by_id = {block["id"]: block for block in out["blocks"]}
+    assert by_id["texts-0"]["translatable"] is True
+    assert by_id["texts-1"]["translatable"] is True
+
+
+def test_real_paper_keeps_body_text_translatable(fixtures_dir) -> None:
+    """合成 fixture では図の中に文字が無いので、畳み込みは何もしない。"""
+    raw = _load(fixtures_dir, "docling-two-column.json")
+    out = normalize_document(raw, HASH, VERSION, CONFIG, [_page()])
+    assert [b["source"][:11] for b in out["blocks"] if b["translatable"]][1] == "Left first."
+    assert not any("図や表の中の文字" in warning for warning in out["warnings"])
+
+
+# ---- manifest 照合 --------------------------------------------------------
+
+
+def _geometry_from_manifest(entry: dict) -> list[dict]:
+    return [
+        {
+            "number": page["number"],
+            "width": page["width"],
+            "height": page["height"],
+            "rotation": page["rotation"],
+            "hasText": page["status"] != "no-text",
+        }
+        for page in entry["pages"]
+    ]
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["two-column.pdf", "general.pdf", "cropbox.pdf", "rotated.pdf", "image-only.pdf"],
+)
+def test_every_fixture_matches_the_manifest(fixtures_dir: Path, expected: dict, name: str) -> None:
+    """manifest に記録した期待矩形を、実 Docling の出力が含んでいること。
+
+    manifest は pypdfium2（抽出器とは別経路）と描画位置から作ってある。
+    """
+    entry = expected["fixtures"][name]
+    tolerance = expected["boxTolerance"]
+    raw = _load(fixtures_dir, "docling-%s.json" % name.replace(".pdf", ""))
+    out = normalize_document(raw, HASH, VERSION, CONFIG, _geometry_from_manifest(entry))
+
+    assert [page["status"] for page in out["pages"]] == [
+        page["status"] for page in entry["pages"]
+    ]
+
+    for want in entry["blocks"]:
+        matches = [
+            block
+            for block in out["blocks"]
+            if block["source"].startswith(want["source"])
+            and any(region["page"] == want["page"] for region in block["regions"])
+        ]
+        assert matches, f"{name}: 「{want['source']}」がページ {want['page']} にありません"
+        region = next(r for r in matches[0]["regions"] if r["page"] == want["page"])
+        got, exp = region["box"], want["box"]
+        assert got[0] <= exp[0] + tolerance and got[1] <= exp[1] + tolerance, (name, want["source"], got, exp)
+        assert got[2] >= exp[2] - tolerance and got[3] >= exp[3] - tolerance, (name, want["source"], got, exp)
