@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   translateBlock,
+  buildRequestBody,
   stripOuterFence,
+  SYSTEM_PROMPT,
   OllamaUnavailableError,
   OllamaModelMissingError,
   type OllamaConfig,
@@ -241,4 +243,64 @@ test('原文にフェンスがある場合は訳文をそのまま通す', () =>
 
 test('包まれていない訳文はそのまま通す', () => {
   assert.equal(stripOuterFence('Plain.', '訳文。'), '訳文。');
+});
+
+test('既定のリクエスト形式は変わらない', () => {
+  const body = buildRequestBody('Hello.', 'Methods', CONFIG);
+  assert.deepEqual(body, {
+    model: 'test-model',
+    think: false,
+    stream: true,
+    options: { temperature: 0.2 },
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: '直前の見出し: Methods\n\n次のブロックを日本語へ訳してください。\n\nHello.',
+      },
+    ],
+  });
+});
+
+test('system prompt だけを差し替えられる', () => {
+  const body = buildRequestBody('Hello.', '', CONFIG, 'PDF 用の指示') as {
+    messages: Array<{ role: string; content: string }>;
+  };
+  assert.equal(body.messages[0].content, 'PDF 用の指示');
+  assert.equal(body.messages[1].content, '次のブロックを日本語へ訳してください。\n\nHello.');
+});
+
+test('translateBlock は渡された system prompt を送る', async () => {
+  let sent: { messages: Array<{ role: string; content: string }> } | undefined;
+  const fetchImpl = (async (_url: string, init: RequestInit) => {
+    sent = JSON.parse(String(init.body));
+    return ndjsonResponse([{ message: { content: '訳' }, done: true }]);
+  }) as unknown as typeof globalThis.fetch;
+
+  await translateBlock({
+    source: 'Hello.',
+    headingContext: '',
+    config: CONFIG,
+    signal: new AbortController().signal,
+    fetchImpl,
+    systemPrompt: '別の指示',
+  });
+  assert.equal(sent?.messages[0].content, '別の指示');
+});
+
+test('systemPrompt を渡さなければ Markdown 用のままになる', async () => {
+  let sent: { messages: Array<{ role: string; content: string }> } | undefined;
+  const fetchImpl = (async (_url: string, init: RequestInit) => {
+    sent = JSON.parse(String(init.body));
+    return ndjsonResponse([{ message: { content: '訳' }, done: true }]);
+  }) as unknown as typeof globalThis.fetch;
+
+  await translateBlock({
+    source: 'Hello.',
+    headingContext: '',
+    config: CONFIG,
+    signal: new AbortController().signal,
+    fetchImpl,
+  });
+  assert.equal(sent?.messages[0].content, SYSTEM_PROMPT);
 });

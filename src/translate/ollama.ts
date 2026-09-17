@@ -35,6 +35,7 @@ export function buildRequestBody(
   source: string,
   headingContext: string,
   config: OllamaConfig,
+  systemPrompt: string = SYSTEM_PROMPT,
 ): Record<string, unknown> {
   const context = headingContext === '' ? '' : `直前の見出し: ${headingContext}\n\n`;
   return {
@@ -43,7 +44,7 @@ export function buildRequestBody(
     stream: true,
     options: { temperature: config.temperature },
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: `${context}次のブロックを日本語へ訳してください。\n\n${source}` },
     ],
   };
@@ -90,8 +91,11 @@ export async function translateBlock(args: {
   signal: AbortSignal;
   fetchImpl?: typeof globalThis.fetch;
   onDelta?: (chunk: string) => void;
+  /** 既定は Markdown 用。PDF 用など別の指示を使うときだけ渡す。 */
+  systemPrompt?: string;
 }): Promise<string> {
   const { source, headingContext, config, signal, onDelta } = args;
+  const systemPrompt = args.systemPrompt ?? SYSTEM_PROMPT;
   const fetchImpl = args.fetchImpl ?? globalThis.fetch;
   const timeout = AbortSignal.timeout(config.timeoutMs);
   const combined = AbortSignal.any([signal, timeout]);
@@ -102,7 +106,7 @@ export async function translateBlock(args: {
     response = await fetchImpl(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(buildRequestBody(source, headingContext, config)),
+      body: JSON.stringify(buildRequestBody(source, headingContext, config, systemPrompt)),
       signal: combined,
     });
   } catch (cause) {
