@@ -82,6 +82,18 @@ test('ループバックなら http の互換サーバーを許す', () => {
   );
 });
 
+// Mutation: loopback なら scheme を問わず許す実装へ戻すと失敗する。
+test('ループバックでも http/https 以外は拒否する', () => {
+  assert.throws(
+    () => assertSendable({ ...openai, baseUrl: 'ftp://127.0.0.1/v1' }, true),
+    ProviderConfigError,
+  );
+  assert.throws(
+    () => assertSendable({ ...ollama, endpoint: 'ftp://127.0.0.1/model' }, false),
+    ProviderConfigError,
+  );
+});
+
 test('キーが空なら拒否する', () => {
   assert.throws(() => assertSendable({ ...openai, apiKey: '' }, true), ProviderConfigError);
   assert.throws(() => assertSendable({ ...openai, apiKey: '   ' }, true), ProviderConfigError);

@@ -49,7 +49,10 @@ export function isLoopbackUrl(raw: string): boolean {
  */
 export function assertSendable(config: ProviderConfig, cloudAllowed: boolean): void {
   if (config.kind === 'ollama') {
-    if (!isLoopbackUrl(config.endpoint)) {
+    if (
+      !isLoopbackUrl(config.endpoint) ||
+      !['http:', 'https:'].includes(new URL(config.endpoint).protocol)
+    ) {
       throw new ProviderConfigError(
         `Ollama の endpoint はループバックだけです: ${config.endpoint}`,
       );
@@ -63,7 +66,8 @@ export function assertSendable(config: ProviderConfig, cloudAllowed: boolean): v
   } catch {
     throw new ProviderConfigError(`送信先が URL ではありません: ${config.baseUrl}`);
   }
-  if (url.protocol !== 'https:' && !isLoopbackUrl(config.baseUrl)) {
+  const localHttp = url.protocol === 'http:' && isLoopbackUrl(config.baseUrl);
+  if (url.protocol !== 'https:' && !localHttp) {
     throw new ProviderConfigError(
       `クラウドの送信先は https だけです（手元の互換サーバーは除く）: ${url.host}`,
     );
