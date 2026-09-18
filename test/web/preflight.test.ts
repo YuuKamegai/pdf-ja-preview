@@ -10,6 +10,7 @@ import {
   judgePreflight,
   probeAssets,
   probeExtractor,
+  probeCloud,
   probeOllama,
   preflight,
   formatProblems,
@@ -24,6 +25,8 @@ function context(overrides: Partial<PreflightContext> = {}): PreflightContext {
     python: '',
     endpoint: 'http://127.0.0.1:11434',
     model: 'qwen3.5:9b-q4_K_M',
+    kind: 'ollama',
+    target: '127.0.0.1:11434',
     ...overrides,
   };
 }
@@ -33,6 +36,18 @@ function facts(overrides: Partial<PreflightFacts> = {}): PreflightFacts {
     missingAssets: [],
     extractor: { kind: 'docker', daemon: true, image: true } as ExtractorFacts,
     ollama: { reachable: true, models: ['qwen3.5:9b-q4_K_M'] },
+    ...overrides,
+  };
+}
+
+function cloudContext(overrides: Partial<PreflightContext> = {}): PreflightContext {
+  return { ...context(), kind: 'openai', target: 'api.openai.com', ...overrides };
+}
+
+function cloudFacts(overrides: Partial<PreflightFacts> = {}): PreflightFacts {
+  return {
+    ...facts(),
+    cloud: { allowed: true, hasKey: true, model: 'gpt-test', reachable: true },
     ...overrides,
   };
 }
@@ -132,6 +147,70 @@ test('致命と警告は致命が先に並ぶ', () => {
   );
 });
 
+test('クラウドで許可が無ければ致命', () => {
+  const problems = judgePreflight(
+    cloudFacts({ cloud: { allowed: false, hasKey: true, model: 'gpt-test', reachable: true } }),
+    cloudContext(),
+  );
+  assert.equal(problems[0]?.level, 'fatal');
+  assert.match(problems[0]?.remedy ?? '', /PDF_JA_CLOUD_ALLOWED/);
+});
+
+test('クラウドで鍵が無ければ致命', () => {
+  const problems = judgePreflight(
+    cloudFacts({ cloud: { allowed: true, hasKey: false, model: 'gpt-test', reachable: true } }),
+    cloudContext(),
+  );
+  assert.equal(problems[0]?.level, 'fatal');
+  assert.match(problems[0]?.remedy ?? '', /--set-key/);
+});
+
+test('クラウドでモデル名が無ければ致命', () => {
+  const problems = judgePreflight(
+    cloudFacts({ cloud: { allowed: true, hasKey: true, model: '', reachable: true } }),
+    cloudContext(),
+  );
+  assert.equal(problems[0]?.level, 'fatal');
+  assert.match(problems[0]?.remedy ?? '', /PDF_JA_MODEL/);
+});
+
+test('クラウドへ届かないのは警告に留める', () => {
+  const problems = judgePreflight(
+    cloudFacts({ cloud: { allowed: true, hasKey: true, model: 'gpt-test', reachable: false } }),
+    cloudContext(),
+  );
+  assert.equal(problems.length, 1);
+  assert.equal(problems[0]?.level, 'warning');
+  assert.match(problems[0]?.title ?? '', /api\.openai\.com/);
+});
+
+test('クラウドでは Ollama の確認をしない', () => {
+  const problems = judgePreflight(
+    cloudFacts({ ollama: { reachable: false, models: [] } }),
+    cloudContext(),
+  );
+  assert.deepEqual(problems, []);
+});
+
+test('ローカルではクラウドの確認をしない', () => {
+  const problems = judgePreflight(
+    facts({ cloud: { allowed: false, hasKey: false, model: '', reachable: false } }),
+    context(),
+  );
+  assert.deepEqual(problems, []);
+});
+
+test('クラウドの問題に API キーを含めない', () => {
+  const problems = judgePreflight(
+    cloudFacts({ cloud: { allowed: false, hasKey: true, model: 'gpt-test', reachable: true } }),
+    cloudContext(),
+  );
+  for (const problem of problems) {
+    assert.equal(problem.title.includes('sk-'), false);
+    assert.equal(problem.remedy.includes('sk-'), false);
+  }
+});
+
 // ---- 探査 -----------------------------------------------------------------
 
 test('配信資産の欠けを実ディレクトリから数える', async () => {
@@ -180,6 +259,25 @@ test('Ollama が居なければ reachable false を返す（例外にしない�
   assert.deepEqual(result.models, []);
 });
 
+test('クラウドの /models は本文を読まず応答コードだけを見る', async () => {
+  let authorization = '';
+  const server = createServer((request, response) => {
+    authorization = request.headers.authorization ?? '';
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.write('{"secret":"account-data"}');
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const port = typeof address === 'object' && address !== null ? address.port : 0;
+  try {
+    assert.equal(await probeCloud(`http://127.0.0.1:${port}`, 'sk-test', 2000), true);
+    assert.equal(authorization, 'Bearer sk-test');
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+});
+
 test('Docker の探査は daemon とイメージを別々に見る', async () => {
   const calls: string[][] = [];
   const run = async (command: string, args: string[]): Promise<void> => {
@@ -220,7 +318,17 @@ test('Python の探査はその実行ファイルを叩く', async () => {
 test('設定から探査先を決める（Docker）', async () => {
   const targets: unknown[] = [];
   const problems = await preflight(
-    { staticRoot: 'C:/x/dist-web', image: 'y:2', python: '', model: 'm', endpoint: 'http://127.0.0.1:1' },
+    {
+      staticRoot: 'C:/x/dist-web',
+      image: 'y:2',
+      python: '',
+      model: 'm',
+      endpoint: 'http://127.0.0.1:1',
+      kind: 'ollama',
+      target: '127.0.0.1:1',
+      cloudAllowed: false,
+      apiKey: '',
+    },
     {
       assets: async () => [],
       extractor: async (target) => {
@@ -228,6 +336,7 @@ test('設定から探査先を決める（Docker）', async () => {
         return { kind: 'docker', daemon: true, image: true };
       },
       ollama: async () => ({ reachable: true, models: ['m'] }),
+      cloud: async () => false,
     },
   );
   assert.deepEqual(problems, []);
@@ -243,6 +352,10 @@ test('PDF_JA_PYTHON があれば Python を探査する', async () => {
       python: 'C:/py/python.exe',
       model: 'm',
       endpoint: 'http://127.0.0.1:1',
+      kind: 'ollama',
+      target: '127.0.0.1:1',
+      cloudAllowed: false,
+      apiKey: '',
     },
     {
       assets: async () => [],
@@ -251,10 +364,116 @@ test('PDF_JA_PYTHON があれば Python を探査する', async () => {
         return { kind: 'python', ok: true };
       },
       ollama: async () => ({ reachable: true, models: ['m'] }),
+      cloud: async () => false,
     },
   );
   assert.deepEqual(targets, [{ kind: 'python', python: 'C:/py/python.exe' }]);
 });
+
+test('Ollama モードではクラウドを探査しない', async () => {
+  let cloudCalls = 0;
+  await preflight(
+    {
+      staticRoot: 'C:/x/dist-web',
+      image: 'y:2',
+      python: '',
+      model: 'm',
+      endpoint: 'http://127.0.0.1:1',
+      kind: 'ollama',
+      target: '127.0.0.1:1',
+      cloudAllowed: true,
+      apiKey: 'sk-test',
+    },
+    {
+      assets: async () => [],
+      extractor: async () => ({ kind: 'docker', daemon: true, image: true }),
+      ollama: async () => ({ reachable: true, models: ['m'] }),
+      cloud: async () => {
+        cloudCalls += 1;
+        return true;
+      },
+    },
+  );
+  assert.equal(cloudCalls, 0);
+});
+
+test('クラウドモードでは Ollama を探査しない', async () => {
+  let ollamaCalls = 0;
+  const problems = await preflight(
+    {
+      staticRoot: 'C:/x/dist-web',
+      image: 'y:2',
+      python: '',
+      model: 'gpt-test',
+      endpoint: 'https://api.openai.com/v1',
+      kind: 'openai',
+      target: 'api.openai.com',
+      cloudAllowed: true,
+      apiKey: 'sk-test',
+    },
+    {
+      assets: async () => [],
+      extractor: async () => ({ kind: 'docker', daemon: true, image: true }),
+      ollama: async () => {
+        ollamaCalls += 1;
+        return { reachable: true, models: [] };
+      },
+      cloud: async () => true,
+    },
+  );
+  assert.deepEqual(problems, []);
+  assert.equal(ollamaCalls, 0);
+});
+
+for (const missing of [
+  {
+    name: '許可',
+    settings: { cloudAllowed: false, apiKey: 'sk-test', model: 'gpt-test' },
+    remedy: /PDF_JA_CLOUD_ALLOWED/,
+  },
+  {
+    name: '鍵',
+    settings: { cloudAllowed: true, apiKey: '', model: 'gpt-test' },
+    remedy: /--set-key/,
+  },
+  {
+    name: 'モデル名',
+    settings: { cloudAllowed: true, apiKey: 'sk-test', model: '   ' },
+    remedy: /PDF_JA_MODEL/,
+  },
+] as const) {
+  test(`クラウドの${missing.name}が無ければ通信しない`, async () => {
+    let cloudCalls = 0;
+    let ollamaCalls = 0;
+    const problems = await preflight(
+      {
+        staticRoot: 'C:/x/dist-web',
+        image: 'y:2',
+        python: '',
+        endpoint: 'https://api.openai.com/v1',
+        kind: 'openai',
+        target: 'api.openai.com',
+        ...missing.settings,
+      },
+      {
+        assets: async () => [],
+        extractor: async () => ({ kind: 'docker', daemon: true, image: true }),
+        ollama: async () => {
+          ollamaCalls += 1;
+          return { reachable: true, models: [] };
+        },
+        cloud: async () => {
+          cloudCalls += 1;
+          return true;
+        },
+      },
+    );
+    assert.equal(problems[0]?.level, 'fatal');
+    assert.match(problems[0]?.remedy ?? '', missing.remedy);
+    assert.equal(cloudCalls, 0);
+    assert.equal(ollamaCalls, 0);
+  });
+}
 
 test('問題は症状と直し方の 2 行で出す', () => {
   const lines = formatProblems([

@@ -36,6 +36,7 @@ export interface PreflightFacts {
   missingAssets: string[];
   extractor: ExtractorFacts;
   ollama: { reachable: boolean; models: string[] };
+  cloud?: { allowed: boolean; hasKey: boolean; model: string; reachable: boolean };
 }
 
 export interface PreflightContext {
@@ -43,6 +44,9 @@ export interface PreflightContext {
   python: string;
   endpoint: string;
   model: string;
+  kind: 'ollama' | 'openai';
+  /** 送信先のホスト名。表示にだけ使う。 */
+  target: string;
 }
 
 /** `gemma3` と `gemma3:latest` は同じものとして扱う。 */
@@ -85,7 +89,40 @@ export function judgePreflight(facts: PreflightFacts, context: PreflightContext)
     });
   }
 
-  if (!facts.ollama.reachable) {
+  if (context.kind === 'openai') {
+    const cloud = facts.cloud;
+    if (cloud === undefined) {
+      fatal.push({
+        level: 'fatal',
+        title: 'クラウドの状態を確認できませんでした。',
+        remedy: 'PDF_JA_PROVIDER の設定を確かめてください。',
+      });
+    } else if (!cloud.allowed) {
+      fatal.push({
+        level: 'fatal',
+        title: `原文を ${context.target} へ送る許可がありません。`,
+        remedy: 'PDF_JA_CLOUD_ALLOWED=1 を設定してください。原文が外部へ送られます。',
+      });
+    } else if (!cloud.hasKey) {
+      fatal.push({
+        level: 'fatal',
+        title: 'API キーが登録されていません。',
+        remedy: 'node dist-web/server.cjs --set-key で登録してください。',
+      });
+    } else if (cloud.model.trim() === '') {
+      fatal.push({
+        level: 'fatal',
+        title: 'クラウドで使うモデル名が未設定です。',
+        remedy: 'PDF_JA_MODEL にモデル名を設定してください。既定値はありません。',
+      });
+    } else if (!cloud.reachable) {
+      warnings.push({
+        level: 'warning',
+        title: `${context.target} へ届きません（訳は出ません）`,
+        remedy: '通信とモデル名、API キーを確かめてください。',
+      });
+    }
+  } else if (!facts.ollama.reachable) {
     // サーバーは立つ。訳が出ないだけなので止めない。
     warnings.push({
       level: 'warning',
@@ -169,22 +206,44 @@ export async function probeOllama(
   }
 }
 
+export async function probeCloud(
+  baseUrl: string,
+  apiKey: string,
+  timeoutMs = 5000,
+): Promise<boolean> {
+  if (apiKey === '') return false;
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/models`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    // 応答本文は読まない。鍵やアカウント情報が混ざりうる。
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 // ---- 組み立てと表示 -------------------------------------------------------
 
 export interface PreflightSettings extends PreflightContext {
   staticRoot: string;
+  cloudAllowed: boolean;
+  apiKey: string;
 }
 
 export interface Probes {
   assets(staticRoot: string): Promise<string[]>;
   extractor(target: ExtractorTarget): Promise<ExtractorFacts>;
   ollama(endpoint: string): Promise<{ reachable: boolean; models: string[] }>;
+  cloud(baseUrl: string, apiKey: string): Promise<boolean>;
 }
 
 const defaultProbes: Probes = {
   assets: probeAssets,
   extractor: (target) => probeExtractor(target),
   ollama: (endpoint) => probeOllama(endpoint),
+  cloud: (baseUrl, apiKey) => probeCloud(baseUrl, apiKey),
 };
 
 export async function preflight(
@@ -196,13 +255,42 @@ export async function preflight(
       ? { kind: 'docker', image: settings.image }
       : { kind: 'python', python: settings.python };
 
-  const [missingAssets, extractor, ollama] = await Promise.all([
-    probes.assets(settings.staticRoot),
-    probes.extractor(target),
+  const assets = probes.assets(settings.staticRoot);
+  const extractor = probes.extractor(target);
+
+  if (settings.kind === 'openai') {
+    const canProbe =
+      settings.cloudAllowed && settings.apiKey !== '' && settings.model.trim() !== '';
+    const cloudProbe = canProbe
+      ? probes.cloud(settings.endpoint, settings.apiKey)
+      : Promise.resolve(false);
+    const [missingAssets, extractorFacts, reachable] = await Promise.all([
+      assets,
+      extractor,
+      cloudProbe,
+    ]);
+    return judgePreflight(
+      {
+        missingAssets,
+        extractor: extractorFacts,
+        ollama: { reachable: true, models: [] },
+        cloud: {
+          allowed: settings.cloudAllowed,
+          hasKey: settings.apiKey !== '',
+          model: settings.model,
+          reachable,
+        },
+      },
+      settings,
+    );
+  }
+
+  const [missingAssets, extractorFacts, ollama] = await Promise.all([
+    assets,
+    extractor,
     probes.ollama(settings.endpoint),
   ]);
-
-  return judgePreflight({ missingAssets, extractor, ollama }, settings);
+  return judgePreflight({ missingAssets, extractor: extractorFacts, ollama }, settings);
 }
 
 /** 症状の行と、その下に直し方の行。字下げを揃えて読みやすくする。 */

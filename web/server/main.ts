@@ -275,6 +275,14 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   }
 
   // 前提を先に確かめる。足りないものは「症状」と「直し方」で出す。
+  let apiKey = '';
+  if (settings.provider.kind === 'openai') {
+    try {
+      apiKey = await new SettingsStore(settings.dataDir).readApiKey();
+    } catch {
+      // 読めない鍵は未登録として preflight で案内する。内容はログへ出さない。
+    }
+  }
   const problems = await preflight({
     staticRoot: settings.staticRoot,
     image: settings.image,
@@ -284,6 +292,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         ? settings.provider.endpoint
         : settings.provider.baseUrl,
     model: settings.model,
+    kind: settings.provider.kind,
+    target: describeTarget(settings.provider),
+    cloudAllowed: settings.cloudAllowed,
+    apiKey,
   });
   for (const line of formatProblems(problems)) console.log(line);
   if (problems.some((problem) => problem.level === 'fatal')) {
