@@ -2,6 +2,7 @@
 (function () {
   const vscode = acquireVsCodeApi();
   const banner = document.getElementById('banner');
+  const notice = document.getElementById('notice');
   const container = document.getElementById('blocks');
 
   /** 拡張が起こしたスクロールの跳ね返りを拡張へ返さないための抑制。 */
@@ -52,6 +53,12 @@
     if (message.kind === 'banner') {
       banner.textContent = message.text;
       banner.hidden = message.text === '';
+      return;
+    }
+
+    if (message.kind === 'notice') {
+      notice.textContent = message.text;
+      notice.hidden = message.text === '';
       return;
     }
 

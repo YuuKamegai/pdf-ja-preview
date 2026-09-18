@@ -5,6 +5,11 @@ import {
   OllamaModelMissingError,
   OllamaUnavailableError,
 } from '../../src/translate/ollama';
+import {
+  ProviderAuthError,
+  ProviderConfigError,
+  ProviderRateLimitError,
+} from '../../src/translate/errors';
 import { SequentialQueue } from '../../src/translate/queue';
 
 interface Harness {
@@ -279,6 +284,51 @@ test('保存後に旧翻訳が abort を無視して失敗しても新しい表�
 
   const final = blockEvents(h.events).filter((event) => event.state !== 'translating');
   assert.deepEqual(final.map((event) => [event.markdown, event.state]), [['JA:New.', 'translated']]);
+});
+
+test('認証の失敗はバナーになる', async () => {
+  const h = harness(async () => {
+    throw new ProviderAuthError('api.openai.com が拒否');
+  });
+  await h.session.open('Alpha.\n');
+  const banner = h.events.filter((e) => e.kind === 'banner').at(-1);
+  assert.ok(banner && banner.kind === 'banner' && banner.text.includes('API キー'));
+});
+
+test('流量制限はバナーになる', async () => {
+  const h = harness(async () => {
+    throw new ProviderRateLimitError('混雑');
+  });
+  await h.session.open('Alpha.\n');
+  const banner = h.events.filter((e) => e.kind === 'banner').at(-1);
+  assert.ok(banner && banner.kind === 'banner' && banner.text.includes('混雑'));
+});
+
+test('設定の不備はバナーになる', async () => {
+  const h = harness(async () => {
+    throw new ProviderConfigError('原文を api.openai.com へ送る許可がありません。');
+  });
+  await h.session.open('Alpha.\n');
+  const banner = h.events.filter((e) => e.kind === 'banner').at(-1);
+  assert.ok(banner && banner.kind === 'banner' && banner.text.includes('許可'));
+});
+
+test('認証エラーのバナーに例外メッセージを埋め込まない', async () => {
+  const h = harness(async () => {
+    throw new ProviderAuthError('sk-leak-0123456789 が拒否されました');
+  });
+  await h.session.open('Alpha.\n');
+  for (const event of h.events) {
+    if (event.kind === 'banner') assert.equal(event.text.includes('sk-leak-0123456789'), false);
+  }
+});
+
+test('打ち切ったら 2 つ目のブロックは訳さない', async () => {
+  const h = harness(async () => {
+    throw new ProviderAuthError('拒否');
+  });
+  await h.session.open('Alpha.\n\nBravo.\n');
+  assert.deepEqual(h.calls, ['Alpha.'], '2 つ目は呼ばない');
 });
 
 test('dispose 後に遅い翻訳が完了しても cache 更新や後続翻訳をしない', async () => {

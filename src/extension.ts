@@ -6,7 +6,7 @@ import { PreviewPanel } from './panel/panel';
 import { blockIndexAtLine, lineForBlock, SyncGate } from './panel/sync';
 import { TranslationSession, type SessionEvent } from './session';
 import { SequentialQueue } from './translate/queue';
-import { translate } from './translate/provider';
+import { assertSendable, describeTarget, translate, type ProviderConfig } from './translate/provider';
 
 interface Live {
   document: vscode.TextDocument;
@@ -19,12 +19,13 @@ interface Live {
 let live: Live | undefined;
 let cachePromise: Promise<TranslationCache> | undefined;
 
+/** 鍵は設定ではなく SecretStorage に置く。settings.json は同期・共有されうるため。 */
+const SECRET_KEY = 'mdJaPreview.apiKey';
+
 export function activate(context: vscode.ExtensionContext): { events: SessionEvent[] } {
   // 統合テストから翻訳の進行を観測するための記録。
   const events: SessionEvent[] = [];
   cachePromise = undefined;
-
-  const SECRET_KEY = 'mdJaPreview.apiKey';
 
   context.subscriptions.push(
     vscode.commands.registerCommand('mdJaPreview.open', () => open(context, events)),
@@ -118,6 +119,29 @@ async function open(context: vscode.ExtensionContext, events: SessionEvent[]): P
     if (live === owned) live = undefined;
   });
 
+  // 鍵は設定ではなく SecretStorage から。config には空で入っている。
+  const secret = (await context.secrets.get(SECRET_KEY)) ?? '';
+  const provider: ProviderConfig =
+    config.provider.kind === 'openai'
+      ? { ...config.provider, apiKey: secret }
+      : config.provider;
+
+  try {
+    assertSendable(provider, config.cloudAllowed);
+  } catch (error) {
+    const text =
+      error instanceof Error ? `設定を確かめてください: ${error.message}` : '設定が不正です。';
+    events.push({ kind: 'banner', text });
+    panel.post({ kind: 'banner', text });
+    return;
+  }
+
+  if (provider.kind === 'openai') {
+    const text = `原文を ${describeTarget(provider)} へ送信しています。`;
+    events.push({ kind: 'notice', text });
+    panel.post({ kind: 'notice', text });
+  }
+
   const cachePath = vscode.Uri.joinPath(context.globalStorageUri, 'translations.json').fsPath;
   // 同じ activation 中は単一インスタンスを共有し、旧パネルの遅い flush が
   // 新パネルのキャッシュを古い内容で上書きするのを防ぐ。
@@ -125,10 +149,10 @@ async function open(context: vscode.ExtensionContext, events: SessionEvent[]): P
   if (live !== owned || owned.disposed) return;
 
   const session = new TranslationSession({
-    model: config.provider.model,
+    model: provider.model,
     maxBlockChars: config.maxBlockChars,
     translate: (source, headingContext, signal) =>
-      translate({ source, headingContext, config: config.provider, signal }),
+      translate({ source, headingContext, config: provider, signal }),
     enqueue: (job) => queue.enqueue(job),
     cacheGet: (model, source) => cache.get(model, source),
     cacheSet: (model, source, ja) => cache.set(model, source, ja),
@@ -234,5 +258,6 @@ function toWebviewMessage(event: SessionEvent): unknown {
       state: event.state,
     };
   }
+  if (event.kind === 'notice') return { kind: 'notice', text: event.text };
   return { kind: 'banner', text: event.text };
 }

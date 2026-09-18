@@ -3,9 +3,12 @@ import { reconcile } from './markdown/reconcile';
 import { matchesStructure } from './markdown/verify';
 import type { BlockState } from './panel/html';
 import {
-  OllamaModelMissingError,
-  OllamaUnavailableError,
-} from './translate/ollama';
+  ModelMissingError,
+  ProviderAuthError,
+  ProviderConfigError,
+  ProviderRateLimitError,
+  ProviderUnavailableError,
+} from './translate/errors';
 
 export interface SessionView {
   index: number;
@@ -18,7 +21,8 @@ export interface SessionView {
 export type SessionEvent =
   | { kind: 'init'; blocks: SessionView[] }
   | { kind: 'block'; index: number; markdown: string; state: BlockState }
-  | { kind: 'banner'; text: string };
+  | { kind: 'banner'; text: string }
+  | { kind: 'notice'; text: string };
 
 export interface SessionDeps {
   model: string;
@@ -32,11 +36,23 @@ export interface SessionDeps {
 
 /** 復帰不能なエラーならバナー文言を返す。ブロック単位の失敗なら undefined。 */
 function fatalBanner(error: unknown): string | undefined {
-  if (error instanceof OllamaModelMissingError) {
-    return `モデル ${error.model} がありません。ターミナルで "ollama pull ${error.model}" を実行してください。`;
+  if (error instanceof ModelMissingError) {
+    return `モデル ${error.model} がありません。ローカルなら "ollama pull ${error.model}"、クラウドならモデル名の設定を確かめてください。`;
   }
-  if (error instanceof OllamaUnavailableError) {
-    return `Ollama へ接続できません。原文のまま表示しています。（${error.message}）`;
+  if (error instanceof ProviderAuthError) {
+    // 例外メッセージを埋め込まない。鍵が混ざりうる。
+    return 'API キーが拒否されました。コマンド「md-ja: API キーを登録」で登録し直してください。';
+  }
+  if (error instanceof ProviderRateLimitError) {
+    return '送信先が混雑しています。しばらく待ってから再試行してください。';
+  }
+  if (error instanceof ProviderConfigError) {
+    return `設定を確かめてください: ${error.message}`;
+  }
+  if (error instanceof ProviderUnavailableError) {
+    // 既存試験が「Ollama」の語を前提にしている（ローカル既定の文言）ため残す。
+    // クラウド接続時も同じ分岐を通るが、原因は error.message 側で示す。
+    return `翻訳先（Ollama など）へ接続できません。原文のまま表示しています。（${error.message}）`;
   }
   return undefined;
 }

@@ -31,6 +31,7 @@ export function buildWebviewHtml(options: {
 </head>
 <body>
 <div id="banner" hidden></div>
+<div id="notice" hidden></div>
 <main id="blocks"></main>
 <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>

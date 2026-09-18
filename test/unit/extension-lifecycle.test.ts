@@ -157,12 +157,21 @@ const mocks: Record<string, string> = {
 (globalThis as any).__mdJaFakePanel = FakePanel;
 (globalThis as any).__mdJaFakeSession = FakeSession;
 
-function context() { return { subscriptions: [], globalStorageUri: { fsPath: 'storage' }, extensionUri: {} }; }
+function context() {
+  return {
+    subscriptions: [],
+    globalStorageUri: { fsPath: 'storage' },
+    extensionUri: {},
+    // 既定は ollama 設定なので、鍵が無くても assertSendable() を通る。
+    secrets: { async get() { return undefined; }, async store() {}, async delete() {} },
+  };
+}
 async function tick(): Promise<void> { await new Promise((resolve) => setImmediate(resolve)); }
 
 test('ready 前のメッセージはパネル側で保持されるため session は ready を待たず開始できる', async () => {
   extension.activate(context());
   const running = harness.commands.get('mdJaPreview.open')!();
+  await tick(); // SecretStorage の読み取り（非同期）を経て cache load へ到達するのを待つ。
   harness.loads[0].resolve();
   await running;
   assert.deepEqual(harness.sessions[0].opens, ['# A']);
@@ -171,6 +180,7 @@ test('ready 前のメッセージはパネル側で保持されるため session
 test('cache load 中に閉じたパネルは load 完了後も session を開始しない', async () => {
   extension.activate(context());
   const running = harness.commands.get('mdJaPreview.open')!();
+  await tick();
   harness.panels[0].dispose();
   harness.loads[0].resolve();
   await running;
@@ -182,6 +192,7 @@ test('連続 open では新しい世代だけが session を開始する', async
   const command = harness.commands.get('mdJaPreview.open')!;
   const first = command();
   const second = command();
+  await tick();
   assert.equal(harness.panels[0].disposed, true);
   harness.loads[0].resolve();
   await Promise.all([first, second]);
@@ -193,6 +204,7 @@ test('切替後の stale session event を捨て、共有 cache を dispose 時�
   const api = extension.activate(context());
   const command = harness.commands.get('mdJaPreview.open')!;
   const first = command();
+  await tick();
   harness.loads[0].resolve();
   await first;
   const before = api.events.length;
@@ -217,6 +229,7 @@ test('autoOpen=true なら Markdown editor の activation で open する', asyn
 test('対象 Markdown の保存だけを live session の update と cache flush へ配線する', async () => {
   extension.activate(context());
   const running = harness.commands.get('mdJaPreview.open')!();
+  await tick();
   harness.loads[0].resolve();
   await running;
   const flushesBefore = harness.caches[0].flushes;
@@ -232,6 +245,7 @@ test('対象 Markdown の保存だけを live session の update と cache flush
 test('panel dispose で保存 listener を解除する', async () => {
   extension.activate(context());
   const running = harness.commands.get('mdJaPreview.open')!();
+  await tick();
   harness.loads[0].resolve();
   await running;
   assert.equal(harness.saveListeners[0].disposed, false);
@@ -243,6 +257,7 @@ test('panel dispose で保存 listener を解除する', async () => {
 test('保存時 update の失敗を unhandled rejection にせず通知する', async () => {
   extension.activate(context());
   const running = harness.commands.get('mdJaPreview.open')!();
+  await tick();
   harness.loads[0].resolve();
   await running;
   harness.sessions[0].updateError = new Error('save failed');
@@ -263,6 +278,7 @@ function visibleRangesEvent(uri: string, line: number) {
 async function opened(): Promise<void> {
   extension.activate(context());
   const running = harness.commands.get('mdJaPreview.open')!();
+  await tick();
   harness.loads[0].resolve();
   await running;
 }
