@@ -8,3 +8,10 @@ playwright-report/
 __pycache__/
 *.pyc
 .superpowers/
+
+# 利用者の環境が落とすもの。配布元なので入り込まないようにしておく。
+.env
+.env.*
+Thumbs.db
+desktop.ini
+.DS_Store

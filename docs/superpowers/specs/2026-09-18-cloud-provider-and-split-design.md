@@ -225,7 +225,7 @@ Node に DPAPI は無い。ネイティブモジュールはこの machine の S
 
 ## 9. 分離（段階 2）
 
-> **実施済み（2026-09-18）。** PDF 側を `<repo>` へ分けた。
+> **実施済み（2026-09-18）。** PDF 側を隣の `pdf-ja-preview` へ分けた。
 > 履歴の保ち方だけ計画と変えた。`git subtree split` は prefix を 1 つしか取れず、PDF 側は
 > `web/` `python/` `scripts/` `test/web*` `media/pdf-ja.ico` などに散っているので使えない。
 > `git clone` してから両側で不要分を落とした。履歴は両方に丸ごと残る。
@@ -234,7 +234,7 @@ Node に DPAPI は無い。ネイティブモジュールはこの machine の S
 > PDF = typecheck:web・test:web 337 件・build:web・test:e2e:web 23 件（実文書 1 件は skip）・
 > pytest 57 件。
 
-PDF 側を `<repo>` へ移す。`git subtree split` で履歴を保つ。
+PDF 側を隣の `pdf-ja-preview` へ移す。`git subtree split` で履歴を保つ。
 
 移すもの: `web/`、`python/`、`dist-web` のビルド設定、`docs/pdf-web.md`、
 `docs/validation/pdf-web-initial.md`、`docs/superpowers/**/pdf-ja-web*`、`scripts/setup-pdf.ps1`、
@@ -263,7 +263,7 @@ GitHub の public リポジトリを 2 つ作り push する。リポジトリ�
 
 - API キー、token、資格情報が履歴のどのコミットにも無いこと。文字列検索は working tree
   だけでなく `git log -p` 全体に対して行う。
-- 絶対パス（`<home>...`）がコード・設定・ドキュメント・ロックファイルに無いこと。
+- 絶対パス（`C:\Users\<名前>\...` のような利用者固有のもの）がコード・設定・ドキュメント・ロックファイルに無いこと。
   ある場合は相対パスか環境変数へ置き換える。ただし docs 内の例示で、利用者が自分の環境へ
   読み替える前提のものは残してよい。その場合は `<repo>` のような記法へ揃える。
 - メールアドレスが git の author 以外に無いこと。

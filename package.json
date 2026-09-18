@@ -4,6 +4,10 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YuuKamegai/pdf-ja-preview.git"
+  },
   "scripts": {
     "typecheck:web": "tsc --noEmit -p web/tsconfig.json && tsc --noEmit -p test/web-e2e/tsconfig.json",
     "test:web": "node --import tsx --test \"test/web/**/*.test.ts\"",
