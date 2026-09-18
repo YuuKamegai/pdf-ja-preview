@@ -11,8 +11,7 @@ const CLOUD_PORT = PORT + 1;
 /**
  * PDF 日本語プレビューのブラウザ試験。
  *
- * 既存の VS Code 拡張の試験（`vscode-test`）とは別に動く。実 HTTP・実 `dist-web`・
- * 実 PDF.js を使い、抽出と翻訳だけ固定する。
+ * 実 HTTP・実 `dist-web`・実 PDF.js を使い、抽出と翻訳だけ固定する。
  */
 export default defineConfig({
   testDir: './test/web-e2e',

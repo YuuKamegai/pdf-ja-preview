@@ -225,6 +225,15 @@ Node に DPAPI は無い。ネイティブモジュールはこの machine の S
 
 ## 9. 分離（段階 2）
 
+> **実施済み（2026-09-18）。** PDF 側を `<repo>` へ分けた。
+> 履歴の保ち方だけ計画と変えた。`git subtree split` は prefix を 1 つしか取れず、PDF 側は
+> `web/` `python/` `scripts/` `test/web*` `media/pdf-ja.ico` などに散っているので使えない。
+> `git clone` してから両側で不要分を落とした。履歴は両方に丸ごと残る。
+> `src/translate/` の複製から `queue.ts` は外した。拡張しか使っていないため。
+> 検証: 拡張 = typecheck + 単体 185 件・build・test:integration 2 件・vsce package。
+> PDF = typecheck:web・test:web 337 件・build:web・test:e2e:web 23 件（実文書 1 件は skip）・
+> pytest 57 件。
+
 PDF 側を `<repo>` へ移す。`git subtree split` で履歴を保つ。
 
 移すもの: `web/`、`python/`、`dist-web` のビルド設定、`docs/pdf-web.md`、

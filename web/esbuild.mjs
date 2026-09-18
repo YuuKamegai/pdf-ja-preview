@@ -1,8 +1,6 @@
 /**
  * Web 版のビルド。出力は `dist-web/`。
  *
- * 既存の VS Code 拡張のビルド（`esbuild.mjs` → `dist/`）には触らない。
- *
  * 原文を扱う実行時に外へ出ないので、PDF.js の worker・CMap・標準フォント・wasm を
  * すべてローカルへ複製する。CDN は使わない。
  */
