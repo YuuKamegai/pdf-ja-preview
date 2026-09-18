@@ -11,6 +11,7 @@ import {
   assertLoopback,
   createExtractor,
   readSettings,
+  seedFromEnv,
   startServer,
 } from '../../web/server/main';
 
@@ -221,21 +222,44 @@ test('鍵が未登録でもクラウド設定でサーバーは起動し、画�
 });
 
 // Mutation: 許可の無いクラウド設定を素通しすると失敗する。
-test('クラウドの許可が無ければ鍵の有無にかかわらず起動しない', async () => {
-  const { dir, staticRoot, cleanup } = await scratch();
+test('許可の無いクラウドの環境変数は移行できない', () => {
+  const settings = readSettings(
+    env({ PDF_JA_PROVIDER: 'openai', PDF_JA_MODEL: 'gpt-test' }),
+    'C:/tmp/dist-web',
+  );
+  assert.throws(() => seedFromEnv(settings)(undefined), /許可/);
+});
+
+// ---- 環境変数からの移行 ---------------------------------------------------
+
+// Mutation: 移行でローカル接続を作らないと失敗する。
+test('クラウドの環境変数から移行すると、ローカル接続も一緒に作る', () => {
   const settings = readSettings(
     env({
-      PDF_JA_PROVIDER: 'openai',
-      PDF_JA_MODEL: 'gpt-test',
-      PDF_JA_PORT: '0',
-      PDF_JA_DATA_DIR: dir,
-      PDF_JA_STATIC_ROOT: staticRoot,
+      PDF_JA_PROVIDER: 'azure',
+      PDF_JA_BASE_URL: 'https://example.services.ai.azure.com/openai/v1',
+      PDF_JA_CLOUD_ALLOWED: '1',
+      PDF_JA_MODEL: 'gpt-test-deploy',
     }),
-    staticRoot,
+    'C:/tmp/dist-web',
   );
-  try {
-    await assert.rejects(startServer(settings), /許可/);
-  } finally {
-    await cleanup();
-  }
+  const built = seedFromEnv(settings)('dpapi-current-user-v1:AAAA');
+  assert.deepEqual(
+    built.connections.map((connection) => connection.name),
+    ['azure', 'local'],
+  );
+  assert.equal(built.selected, 'azure');
+  assert.equal(built.connections[0]?.apiKeyProtected, 'dpapi-current-user-v1:AAAA');
+  assert.equal(built.connections[0]?.trust, 'cloud-allowed');
+  assert.equal(built.connections[1]?.trust, 'loopback');
+});
+
+test('ローカルの環境変数から移行すると 1 件だけ作る', () => {
+  const built = seedFromEnv(readSettings(env(), 'C:/tmp/dist-web'))(undefined);
+  assert.deepEqual(
+    built.connections.map((connection) => connection.name),
+    ['ollama'],
+  );
+  assert.equal(built.connections[0]?.model, DEFAULT_MODEL);
+  assert.equal(built.connections[0]?.apiKeyProtected, undefined);
 });

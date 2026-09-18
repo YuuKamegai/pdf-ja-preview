@@ -36,7 +36,7 @@ export interface PreflightFacts {
   missingAssets: string[];
   extractor: ExtractorFacts;
   ollama: { reachable: boolean; models: string[] };
-  cloud?: { allowed: boolean; hasKey: boolean; model: string; reachable: boolean };
+  cloud?: { hasKey: boolean; model: string; reachable: boolean };
 }
 
 export interface PreflightContext {
@@ -97,25 +97,19 @@ export function judgePreflight(facts: PreflightFacts, context: PreflightContext)
         title: 'クラウドの状態を確認できませんでした。',
         remedy: 'PDF_JA_PROVIDER の設定を確かめてください。',
       });
-    } else if (!cloud.allowed) {
-      fatal.push({
-        level: 'fatal',
-        title: `原文を ${context.target} へ送る許可がありません。`,
-        remedy: 'PDF_JA_CLOUD_ALLOWED=1 を設定してください。原文が外部へ送られます。',
-      });
     } else if (cloud.model.trim() === '') {
-      fatal.push({
-        level: 'fatal',
-        title: 'クラウドで使うモデル名が未設定です。',
-        remedy: 'PDF_JA_MODEL にモデル名を設定してください。既定値はありません。',
+      // モデルも鍵も画面から直せる。ここで止めると、その画面へ辿り着けない。
+      warnings.push({
+        level: 'warning',
+        title: 'この接続のモデル名が未設定です（訳は出ません）',
+        remedy: '画面の「接続を管理」でモデル名を入れてください。既定値はありません。',
       });
     } else if (!cloud.hasKey) {
-      // 鍵は画面から登録できる。ここで止めると、その画面へ辿り着けない。
       warnings.push({
         level: 'warning',
         title: 'API キーが登録されていません（訳は出ません）',
         remedy:
-          '画面の「APIキー」欄から登録してください。node dist-web/server.cjs --set-key でも登録できます。',
+          '画面の「接続を管理」から登録してください。node dist-web/server.cjs --set-key でも登録できます。',
       });
     } else if (!cloud.reachable) {
       warnings.push({
@@ -285,7 +279,6 @@ export async function preflight(
         extractor: extractorFacts,
         ollama: { reachable: true, models: [] },
         cloud: {
-          allowed: settings.cloudAllowed,
           hasKey: settings.apiKey !== '',
           model: settings.model,
           reachable,

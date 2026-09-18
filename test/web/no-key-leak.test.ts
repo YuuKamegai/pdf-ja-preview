@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import { describeTarget } from '../../src/translate/provider';
 import { formatProblems, judgePreflight, preflight } from '../../web/server/preflight';
-import { readSettings, startServer } from '../../web/server/main';
+import { readSettings, seedFromEnv, startServer } from '../../web/server/main';
 import { SettingsStore } from '../../web/server/settings-store';
 
 const KEY = 'sk-canary-0123456789abcdef';
@@ -45,7 +45,7 @@ test('preflight の問題文に鍵が現れない', () => {
       missingAssets: [],
       extractor: { kind: 'docker', daemon: true, image: true },
       ollama: { reachable: true, models: [] },
-      cloud: { allowed: false, hasKey: true, model: 'gpt-test', reachable: false },
+      cloud: { hasKey: true, model: 'gpt-test', reachable: false },
     },
     {
       image: 'x:1',
@@ -116,8 +116,6 @@ test('実 SettingsStore に登録した鍵は HTTP 応答のどこにも出な�
     'utf8',
   );
 
-  await new SettingsStore(dir).setApiKey(KEY);
-
   const settings = readSettings(
     {
       LOCALAPPDATA: dir,
@@ -131,6 +129,12 @@ test('実 SettingsStore に登録した鍵は HTTP 応答のどこにも出な�
     staticRoot,
   );
 
+  // 環境変数からの移行で作られる接続へ、実 DPAPI で鍵を入れる。
+  const store = new SettingsStore(dir);
+  await store.loadOrMigrate(seedFromEnv(settings));
+  const migrated = (await store.resolveSelected()).connection;
+  await store.update(migrated.name, migrated, KEY);
+
   const running = await startServer(settings);
   try {
     const page = await (await fetch(running.url)).text();
@@ -139,17 +143,19 @@ test('実 SettingsStore に登録した鍵は HTTP 応答のどこにも出な�
     const token = /name="pdf-ja-token" content="([^"]+)"/.exec(page)?.[1];
     assert.ok(token, 'token を取り出せる');
 
-    const status = await fetch(`${running.url}api/settings/api-key`, {
+    const status = await fetch(`${running.url}api/connections`, {
       headers: { 'x-pdf-ja-token': token },
     });
     const body = await status.text();
     assert.equal(status.status, 200);
-    assert.equal(body.includes(KEY), false, '状態応答は登録の有無だけを返す');
-    assert.deepEqual(JSON.parse(body), {
-      configured: true,
-      cloud: true,
-      target: 'api.openai.com',
-    });
+    assert.equal(body.includes(KEY), false, '一覧は登録の有無だけを返す');
+    const list = JSON.parse(body) as {
+      selected: string;
+      connections: { name: string; target: string; configured: boolean }[];
+    };
+    assert.equal(list.selected, 'openai');
+    assert.equal(list.connections[0]?.target, 'api.openai.com');
+    assert.equal(list.connections[0]?.configured, true);
 
     // 知らない文書のエラー経路にも鍵は混ざらない。
     const missing = await fetch(`${running.url}api/documents/unknown`, {

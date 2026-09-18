@@ -11,11 +11,17 @@ import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
 
 import {
-  assertSendable,
   describeTarget,
   normalizeAzureBaseUrl,
   type ProviderConfig,
 } from '../../src/translate/provider';
+import {
+  ConnectionError,
+  toProviderConfig,
+  validateConnection,
+  viewOf,
+  type Connection,
+} from './connection';
 import { DocumentStore } from './documents';
 import {
   DEFAULT_EXTRACTION_TIMEOUT_MS,
@@ -23,12 +29,11 @@ import {
   pythonExtractor,
   type Extractor,
 } from './extractor';
-import { createApp, type CloudKeyControl } from './http';
-import { formatProblems, preflight } from './preflight';
+import { createApp, type ConnectionControl } from './http';
+import { formatProblems, preflight, probeCloud, probeOllama } from './preflight';
 import { Scheduler } from './scheduler';
 import { allowedHostsFor, createToken } from './security';
-import type { ProviderConnection } from './session';
-import { SettingsStore } from './settings-store';
+import { SettingsStore, type MigrationSeed } from './settings-store';
 import { Storage, defaultDataDir } from './storage';
 
 export const DEFAULT_PORT = 7391;
@@ -150,54 +155,109 @@ export interface RunningServer {
 }
 
 /**
- * 起動時は「鍵以外」の前提だけを確かめる。
+ * 環境変数から、初回移行に使う接続の種を組む。
  *
- * 鍵は画面から登録できる。鍵が無いだけで起動を止めると、その画面へ辿り着けない。
- * 鍵そのものはセッションを作るたびに `resolveConnection()` が確かめる。
+ * 移行のときだけ呼ぶ。以後「どの LLM へ送るか」は settings.json の接続一覧が唯一の
+ * 真実であり、ここの環境変数は読まない。
  */
-const KEY_CHECKED_PER_SESSION = 'checked-per-session';
+export function seedFromEnv(settings: ServerSettings): MigrationSeed {
+  return (legacyApiKeyProtected) => {
+    const provider = settings.provider;
+    const local: Connection = {
+      name: 'local',
+      provider: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      model: DEFAULT_MODEL,
+      trust: 'loopback',
+    };
+
+    if (provider.kind === 'ollama') {
+      const only = validateConnection({
+        name: 'ollama',
+        provider: 'ollama',
+        baseUrl: provider.endpoint,
+        model: settings.model,
+        trust: 'loopback',
+      });
+      return { connections: [only], selected: only.name };
+    }
+
+    if (!settings.cloudAllowed) {
+      throw new Error(
+        `原文を ${describeTarget(provider)} へ送る許可がありません。` +
+          'PDF_JA_CLOUD_ALLOWED=1 を付けて一度起動するか、' +
+          'ローカルで起動してから画面で接続を登録してください。',
+      );
+    }
+
+    const cloud: Connection = validateConnection({
+      name: provider.kind,
+      provider: provider.kind,
+      baseUrl: provider.baseUrl,
+      model: settings.model,
+      trust: 'cloud-allowed',
+    });
+    if (legacyApiKeyProtected !== undefined) cloud.apiKeyProtected = legacyApiKeyProtected;
+    return { connections: [cloud, local], selected: cloud.name };
+  };
+}
+
+/** 接続の口。HTTP の層は SettingsStore を直接触らない。 */
+export function connectionControlFor(
+  store: SettingsStore,
+  settings: ServerSettings,
+): ConnectionControl {
+  const options = {
+    temperature: 0.2,
+    timeoutMs: 120_000,
+    think: settings.provider.kind === 'ollama' ? settings.provider.think : false,
+  };
+  return {
+    list: () => store.list(),
+    add: (input, apiKey) => store.add(input, apiKey),
+    update: (name, input, apiKey) => store.update(name, input, apiKey),
+    remove: (name) => store.remove(name),
+    select: (name) => store.select(name),
+    async test(name) {
+      const connection = store.get(name);
+      if (!connection) throw new ConnectionError('unknown-connection', 'その接続はありません');
+      const target = viewOf(connection).target;
+      if (connection.model === '') return { ok: false, detail: 'モデル名が未設定です。' };
+
+      if (connection.provider === 'ollama') {
+        const found = await probeOllama(connection.baseUrl);
+        if (!found.reachable) return { ok: false, detail: `${target} へ届きません。` };
+        const has = found.models.some(
+          (model) => model === connection.model || model === `${connection.model}:latest`,
+        );
+        return { ok: has, detail: has ? '届きました。' : `モデルがありません: ${connection.model}` };
+      }
+
+      const apiKey = await store.keyOf(connection.name);
+      if (apiKey === '') return { ok: false, detail: 'API キーが登録されていません。' };
+      const ok = await probeCloud(
+        connection.baseUrl,
+        apiKey,
+        5000,
+        connection.provider === 'azure' ? 'api-key' : 'bearer',
+      );
+      return { ok, detail: ok ? '届きました。' : `${target} へ届きません。` };
+    },
+    async resolveSelected() {
+      const resolved = await store.resolveSelected();
+      return {
+        name: resolved.connection.name,
+        model: resolved.connection.model,
+        connection: toProviderConfig(resolved.connection, resolved.apiKey, options),
+      };
+    },
+  };
+}
 
 export async function startServer(settings: ServerSettings): Promise<RunningServer> {
-  const provider = settings.provider;
-  if (provider.kind !== 'ollama') {
-    assertSendable({ ...provider, apiKey: KEY_CHECKED_PER_SESSION }, settings.cloudAllowed);
-  } else {
-    assertSendable(provider, settings.cloudAllowed);
-  }
-
   const store = new SettingsStore(settings.dataDir);
-
-  /** セッションを作るたびに、そのときの鍵で接続を組み直す。 */
-  const resolveConnection = async (): Promise<ProviderConnection> => {
-    if (provider.kind === 'ollama') return provider;
-    let apiKey = '';
-    try {
-      apiKey = await store.readApiKey();
-    } catch {
-      // 読めない鍵は未登録として扱う。内容は例外にもログにも出さない。
-    }
-    const resolved = { ...provider, apiKey };
-    // 鍵以外はここでも確かめる。鍵の有無は呼び出し側が案内する。
-    assertSendable(
-      apiKey === '' ? { ...resolved, apiKey: KEY_CHECKED_PER_SESSION } : resolved,
-      settings.cloudAllowed,
-    );
-    return resolved;
-  };
-
-  /** クラウドのときだけ、画面から鍵を扱えるようにする。 */
-  const cloudKey: CloudKeyControl | undefined =
-    provider.kind === 'ollama'
-      ? undefined
-      : {
-          target: describeTarget(provider),
-          configured: async () => {
-            const stored = (await store.load()).apiKey;
-            return typeof stored === 'string' && stored !== '';
-          },
-          set: (value) => store.setApiKey(value),
-          clear: () => store.clearApiKey(),
-        };
+  await store.loadOrMigrate(seedFromEnv(settings));
+  const connections = connectionControlFor(store, settings);
 
   const storage = new Storage(settings.dataDir);
   await storage.initialize();
@@ -215,8 +275,7 @@ export async function startServer(settings: ServerSettings): Promise<RunningServ
     documents,
     storage,
     scheduler,
-    resolveConnection,
-    cloudKey,
+    connections,
     defaultModel: settings.model,
     staticRoot: settings.staticRoot,
     security: { token, allowedHosts },
@@ -295,16 +354,23 @@ async function readSecretLine(prompt: string): Promise<string> {
   }
 }
 
-async function manageKey(argv: string[], dataDir: string): Promise<number> {
+/** `--set-key` / `--clear-key` は、選択中の接続に対して効く。 */
+async function manageKey(
+  argv: string[],
+  dataDir: string,
+  seed: MigrationSeed,
+): Promise<number> {
   const store = new SettingsStore(dataDir);
+  await store.loadOrMigrate(seed);
+  const { connection } = await store.resolveSelected();
   if (argv.includes('--clear-key')) {
-    await store.clearApiKey();
-    console.log('API キーを削除しました。');
+    await store.update(connection.name, connection, null);
+    console.log(`API キーを削除しました: ${connection.name}`);
     return 0;
   }
   const value = await readSecretLine('API キー（入力は表示されません）: ');
-  await store.setApiKey(value);
-  console.log(`API キーを暗号化して保存しました: ${store.path}`);
+  await store.update(connection.name, connection, value);
+  console.log(`API キーを暗号化して保存しました: ${connection.name}`);
   return 0;
 }
 
@@ -322,7 +388,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 
   if (argv.includes('--set-key') || argv.includes('--clear-key')) {
     try {
-      return await manageKey(argv, settings.dataDir);
+      return await manageKey(argv, settings.dataDir, seedFromEnv(settings));
     } catch (error) {
       console.error((error as Error).message);
       if (launcher) await holdWindow();
@@ -331,27 +397,28 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   }
 
   // 前提を先に確かめる。足りないものは「症状」と「直し方」で出す。
-  let apiKey = '';
-  if (settings.provider.kind !== 'ollama') {
-    try {
-      apiKey = await new SettingsStore(settings.dataDir).readApiKey();
-    } catch {
-      // 読めない鍵は未登録として preflight で案内する。内容はログへ出さない。
-    }
+  // 見るのは選択中の接続だけ。環境変数はここまでで役目を終える。
+  const store = new SettingsStore(settings.dataDir);
+  let selected: { connection: Connection; apiKey: string };
+  try {
+    await store.loadOrMigrate(seedFromEnv(settings));
+    selected = await store.resolveSelected();
+  } catch (error) {
+    console.error(`設定を読めません: ${(error as Error).message}`);
+    if (launcher) await holdWindow();
+    return 1;
   }
+
   const problems = await preflight({
     staticRoot: settings.staticRoot,
     image: settings.image,
     python: settings.python,
-    endpoint:
-      settings.provider.kind === 'ollama'
-        ? settings.provider.endpoint
-        : settings.provider.baseUrl,
-    model: settings.model,
-    kind: settings.provider.kind,
-    target: describeTarget(settings.provider),
-    cloudAllowed: settings.cloudAllowed,
-    apiKey,
+    endpoint: selected.connection.baseUrl,
+    model: selected.connection.model,
+    kind: selected.connection.provider,
+    target: viewOf(selected.connection).target,
+    cloudAllowed: selected.connection.trust === 'cloud-allowed',
+    apiKey: selected.apiKey,
   });
   for (const line of formatProblems(problems)) console.log(line);
   if (problems.some((problem) => problem.level === 'fatal')) {
@@ -374,8 +441,17 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   console.log(`  保存先  : ${settings.dataDir}`);
   console.log(`  配信元  : ${settings.staticRoot}`);
   console.log(`  抽出    : ${settings.extractorKind === 'docker' ? settings.image : settings.python}`);
-  console.log(`  翻訳先  : ${describeTarget(settings.provider)} (${settings.model})`);
+  console.log(
+    `  翻訳先  : ${viewOf(selected.connection).target} ` +
+      `(${selected.connection.name} / ${selected.connection.model || 'モデル未設定'})`,
+  );
   console.log(`  終了    : ${launcher ? 'この窓を閉じる（または Ctrl+C）' : 'Ctrl+C'}`);
+
+  const legacy = ['PDF_JA_PROVIDER', 'PDF_JA_BASE_URL', 'PDF_JA_MODEL', 'PDF_JA_CLOUD_ALLOWED'];
+  if (legacy.some((key) => process.env[key] !== undefined)) {
+    console.log('');
+    console.log('注意: PDF_JA_PROVIDER などは使われません。送信先は画面の接続一覧で選びます。');
+  }
 
   if (argv.includes('--open')) openBrowser(running.url);
 

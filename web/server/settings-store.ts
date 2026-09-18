@@ -226,6 +226,12 @@ export class SettingsStore {
     await this.#save({ ...settings, selected: settings.connections[index].name });
   }
 
+  /** 名前で引いた接続の鍵を復号する。無ければ空文字。接続テストにだけ使う。 */
+  async keyOf(name: string): Promise<string> {
+    const connection = this.get(name);
+    return connection === undefined ? '' : this.#decrypt(connection);
+  }
+
   /** 選択中の接続と、復号した鍵。読めない鍵は未登録として扱う。 */
   async resolveSelected(): Promise<{ connection: Connection; apiKey: string }> {
     const settings = this.#current();

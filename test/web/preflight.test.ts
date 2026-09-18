@@ -47,7 +47,7 @@ function cloudContext(overrides: Partial<PreflightContext> = {}): PreflightConte
 function cloudFacts(overrides: Partial<PreflightFacts> = {}): PreflightFacts {
   return {
     ...facts(),
-    cloud: { allowed: true, hasKey: true, model: 'gpt-test', reachable: true },
+    cloud: { hasKey: true, model: 'gpt-test', reachable: true },
     ...overrides,
   };
 }
@@ -147,19 +147,10 @@ test('致命と警告は致命が先に並ぶ', () => {
   );
 });
 
-test('クラウドで許可が無ければ致命', () => {
-  const problems = judgePreflight(
-    cloudFacts({ cloud: { allowed: false, hasKey: true, model: 'gpt-test', reachable: true } }),
-    cloudContext(),
-  );
-  assert.equal(problems[0]?.level, 'fatal');
-  assert.match(problems[0]?.remedy ?? '', /PDF_JA_CLOUD_ALLOWED/);
-});
-
 // 鍵は画面から登録できる。起動を止めると、その画面へ辿り着けない。
 test('クラウドで鍵が無いのは警告に留め、画面での登録を案内する', () => {
   const problems = judgePreflight(
-    cloudFacts({ cloud: { allowed: true, hasKey: false, model: 'gpt-test', reachable: true } }),
+    cloudFacts({ cloud: { hasKey: false, model: 'gpt-test', reachable: true } }),
     cloudContext(),
   );
   assert.equal(problems.length, 1);
@@ -170,27 +161,29 @@ test('クラウドで鍵が無いのは警告に留め、画面での登録を�
 });
 
 // 鍵が無くても、直しようのないモデル未設定は先に致命として出す。
-test('鍵もモデル名も無ければモデル名の方を致命として出す', () => {
+test('鍵もモデル名も無ければモデル名の方を先に出す', () => {
   const problems = judgePreflight(
-    cloudFacts({ cloud: { allowed: true, hasKey: false, model: '', reachable: false } }),
+    cloudFacts({ cloud: { hasKey: false, model: '', reachable: false } }),
     cloudContext(),
   );
-  assert.equal(problems[0]?.level, 'fatal');
-  assert.match(problems[0]?.remedy ?? '', /PDF_JA_MODEL/);
+  assert.equal(problems[0]?.level, 'warning');
+  assert.match(problems[0]?.title ?? '', /モデル名/);
 });
 
-test('クラウドでモデル名が無ければ致命', () => {
+// モデルも鍵も画面から直せる。止めると、その画面へ辿り着けない。
+test('クラウドでモデル名が無いのは警告に留める', () => {
   const problems = judgePreflight(
-    cloudFacts({ cloud: { allowed: true, hasKey: true, model: '', reachable: true } }),
+    cloudFacts({ cloud: { hasKey: true, model: '', reachable: true } }),
     cloudContext(),
   );
-  assert.equal(problems[0]?.level, 'fatal');
-  assert.match(problems[0]?.remedy ?? '', /PDF_JA_MODEL/);
+  assert.equal(problems.length, 1);
+  assert.equal(problems[0]?.level, 'warning');
+  assert.match(problems[0]?.remedy ?? '', /接続を管理/);
 });
 
 test('クラウドへ届かないのは警告に留める', () => {
   const problems = judgePreflight(
-    cloudFacts({ cloud: { allowed: true, hasKey: true, model: 'gpt-test', reachable: false } }),
+    cloudFacts({ cloud: { hasKey: true, model: 'gpt-test', reachable: false } }),
     cloudContext(),
   );
   assert.equal(problems.length, 1);
@@ -208,7 +201,7 @@ test('クラウドでは Ollama の確認をしない', () => {
 
 test('ローカルではクラウドの確認をしない', () => {
   const problems = judgePreflight(
-    facts({ cloud: { allowed: false, hasKey: false, model: '', reachable: false } }),
+    facts({ cloud: { hasKey: false, model: '', reachable: false } }),
     context(),
   );
   assert.deepEqual(problems, []);
@@ -216,7 +209,7 @@ test('ローカルではクラウドの確認をしない', () => {
 
 test('クラウドの問題に API キーを含めない', () => {
   const problems = judgePreflight(
-    cloudFacts({ cloud: { allowed: false, hasKey: true, model: 'gpt-test', reachable: true } }),
+    cloudFacts({ cloud: { hasKey: true, model: 'gpt-test', reachable: true } }),
     cloudContext(),
   );
   for (const problem of problems) {
@@ -491,15 +484,9 @@ test('クラウドモードでは Ollama を探査しない', async () => {
   assert.equal(ollamaCalls, 0);
 });
 
-// 3 つのどれが欠けても外へは 1 バイトも出さない。鍵だけは画面から直せるので
-// 起動は止めない（level が違うだけで、探査しないことは同じ）。
+// 鍵もモデル名も欠けていたら外へは 1 バイトも出さない。どちらも画面から直せるので
+// 起動は止めず、警告に留める（探査しないことは変わらない）。
 for (const missing of [
-  {
-    name: '許可',
-    settings: { cloudAllowed: false, apiKey: 'sk-test', model: 'gpt-test' },
-    remedy: /PDF_JA_CLOUD_ALLOWED/,
-    level: 'fatal',
-  },
   {
     name: '鍵',
     settings: { cloudAllowed: true, apiKey: '', model: 'gpt-test' },
@@ -509,8 +496,8 @@ for (const missing of [
   {
     name: 'モデル名',
     settings: { cloudAllowed: true, apiKey: 'sk-test', model: '   ' },
-    remedy: /PDF_JA_MODEL/,
-    level: 'fatal',
+    remedy: /接続を管理/,
+    level: 'warning',
   },
 ] as const) {
   test(`クラウドの${missing.name}が無ければ通信しない`, async () => {

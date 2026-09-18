@@ -114,6 +114,7 @@ async function main(): Promise<number> {
     sessionId: 'validate',
     documentId: job.id,
     documentHash: hash,
+    connectionName: 'local',
     document,
     model,
     storage,
