@@ -118,20 +118,10 @@ node dist-web/server.cjs --open
 揃うまで原文を送信しません。**クラウドの既定モデル名はありません。** 使用するモデルを
 `PDF_JA_MODEL` へ明示してください。
 
-API キーは、履歴やログへ残さないため TTY（対話端末）からだけ登録できます。リダイレクトや
-pipe からの入力は拒否します。
-
-```powershell
-node dist-web/server.cjs --set-key    # 表示されない入力欄へ API キーを入力
-node dist-web/server.cjs --clear-key  # 登録した API キーを削除
-```
-
-キーは Windows の DPAPI で暗号化して保存します。復号できるのは、登録したときと同じ
-Windows ユーザー・同じ PC だけです。平文を環境変数や設定ファイルへ書かないでください。
-
 起動前に、同じ端末で次を設定します。
 
 ```powershell
+# OpenAI 互換 endpoint（Bearer 認証）
 $env:PDF_JA_PROVIDER = 'openai'
 $env:PDF_JA_BASE_URL = 'https://api.openai.com/v1'
 $env:PDF_JA_CLOUD_ALLOWED = '1'
@@ -139,8 +129,50 @@ $env:PDF_JA_MODEL = '<利用するモデル名>'
 node dist-web/server.cjs
 ```
 
+```powershell
+# Azure OpenAI v1（api-key 認証）
+$env:PDF_JA_PROVIDER = 'azure'
+$env:PDF_JA_BASE_URL = 'https://<resource>.openai.azure.com/openai/v1'
+$env:PDF_JA_CLOUD_ALLOWED = '1'
+$env:PDF_JA_MODEL = '<deployment 名>'
+node dist-web/server.cjs
+```
+
+`azure` のときは次の 3 点が `openai` と違います。
+
+- 送信先は `https://<resource>.openai.azure.com/openai/v1` または
+  `https://<resource>.services.ai.azure.com/openai/v1` だけです。ほかのホスト、
+  `http`、非標準ポート、query 付きの URL は起動時に拒否します。
+- 認証は `Authorization: Bearer` ではなく `api-key` ヘッダーです。
+- `PDF_JA_MODEL` にはモデル名ではなく **Azure の deployment 名**を入れます。
+
+#### API キーの登録
+
+画面上部の「APIキー」欄に貼り付けて **登録** を押します。`provider` がクラウドの
+ときだけこの欄が出ます。登録するとすぐ翻訳が始まり、サーバーを立て直す必要は
+ありません。**削除** で消せます。登録済みかどうかだけが表示され、鍵そのものは
+画面にもサーバーの応答にも戻りません。
+
+鍵が未登録のままでもサーバーは起動して画面を配信します（起動ログには注意が出ます）。
+原文は送られず、PDF を開くと「API キーが登録されていません」と出ます。
+
+端末からも登録できます。履歴やログへ残さないため TTY（対話端末）からだけ受け付け、
+リダイレクトや pipe からの入力は拒否します。
+
+```powershell
+node dist-web/server.cjs --set-key    # 表示されない入力欄へ API キーを入力
+node dist-web/server.cjs --clear-key  # 登録した API キーを削除
+```
+
+どちらで登録しても、キーは Windows の DPAPI で暗号化して保存します。復号できるのは、
+登録したときと同じ Windows ユーザー・同じ PC だけです。平文を環境変数や設定ファイルへ
+書かないでください。
+
 クラウドを使うと原文が `PDF_JA_BASE_URL` の送信先へ出ます。クラウドで動いている間は、
 画面上部に送信先ホストを常時表示します。API キー、URL のパス、query は表示しません。
+
+翻訳中に鍵を削除しても、そのとき動いているセッションの送信は止まりません。次に PDF を
+開いたときから止まります。確実に止めるにはサーバーを終了してください。
 
 ### ダブルクリックで起動する
 
@@ -169,6 +201,8 @@ powershell -File scripts/install-shortcut.ps1
 | `dist-web/` の配信資産 | **止まる**。`npm run build:web` を促す |
 | 抽出器（Docker の応答と抽出イメージ、または `PDF_JA_PYTHON`） | **止まる**。Docker Desktop の起動か `setup-pdf.ps1` を促す |
 | Ollama の応答と既定モデル | **止まらない**。訳が出ないだけなので警告に留める |
+| クラウドの送信許可（`PDF_JA_CLOUD_ALLOWED`）とモデル名（`PDF_JA_MODEL`） | **止まる**。どちらも環境変数でしか直せない |
+| クラウドの API キー | **止まらない**。画面から登録できるので、警告に留めて画面を配信する |
 
 ショートカットから起動したときは `--launcher` が付きます。この印があると、止まった
 ときに窓を開いたままにして、何が足りないかを読めるようにします。
@@ -178,10 +212,10 @@ powershell -File scripts/install-shortcut.ps1
 | 変数 | 既定 | 意味 |
 |---|---|---|
 | `PDF_JA_PORT` | `7391` | 待ち受けポート。`127.0.0.1` にだけ bind します |
-| `PDF_JA_PROVIDER` | `ollama` | `ollama` または `openai`。クラウドは opt-in です |
-| `PDF_JA_BASE_URL` | `https://api.openai.com/v1` | `openai` のときの送信先 |
+| `PDF_JA_PROVIDER` | `ollama` | `ollama` / `openai` / `azure`。クラウドは opt-in です |
+| `PDF_JA_BASE_URL` | `https://api.openai.com/v1` | `openai` / `azure` のときの送信先。`azure` は公式 endpoint の `/openai/v1` だけ |
 | `PDF_JA_CLOUD_ALLOWED` | （未設定） | `1` のときだけクラウド送信を許可します |
-| `PDF_JA_MODEL` | Ollama: `qwen3.5:9b-q4_K_M` / cloud: なし | 翻訳モデル。クラウドでは必ず明示します |
+| `PDF_JA_MODEL` | Ollama: `qwen3.5:9b-q4_K_M` / cloud: なし | 翻訳モデル。クラウドでは必ず明示します。`azure` では deployment 名 |
 | `PDF_JA_OLLAMA_ENDPOINT` | `http://127.0.0.1:11434` | ループバック以外は拒否します |
 | `PDF_JA_DATA_DIR` | `%LOCALAPPDATA%\pdf-ja-preview` | キャッシュと一時ファイルの置き場所 |
 | `PDF_JA_EXTRACTOR_IMAGE` | `pdf-ja-extractor:1` | 抽出イメージ |
@@ -215,7 +249,9 @@ powershell -File scripts/install-shortcut.ps1
 
 - 画面の **「保存した訳を消す」** で、その文書の訳だけ消せます。
 - **「閉じる」** で、その文書の一時 PDF をサーバーから外します。
-- フォルダごと消しても問題ありません。次に開いたときに取り直します。
+- フォルダごと消しても問題ありません。次に開いたときに取り直します。ただし
+  `settings.json` も消えるので、**登録した API キーは戻りません**。クラウドを使って
+  いるなら登録し直してください。
 
 異常終了で一時 PDF が残っても、次にサーバーを起動したときに回収します。生きている
 別のサーバーが使っているものは残します。
@@ -226,6 +262,9 @@ powershell -File scripts/install-shortcut.ps1
 |---|---|
 | 「抽出に失敗」で止まる | Docker Desktop が動いているか。`docker run --rm pdf-ja-extractor:1 --help` |
 | 訳が出ない・「失敗」が並ぶ | Ollama が動いているか、モデル名が合っているか。`curl http://127.0.0.1:11434/api/tags` |
+| クラウドで「API キーが登録されていません」と出る | 画面上部の「APIキー」欄から登録する。`--set-key` でも可 |
+| クラウドで「APIキー」欄が出ない | `PDF_JA_PROVIDER` が `openai` か `azure` になっているか。既定の `ollama` では出ません |
+| Azure で起動時に送信先を拒否される | `PDF_JA_BASE_URL` が `https://<resource>.openai.azure.com/openai/v1` の形か。`PDF_JA_MODEL` は deployment 名か |
 | 「文章を抽出できません」 | 文字が入っていない PDF です。初期版では扱えません |
 | 「図や表の中の文字 N 件は訳しません」 | 仕様です。図の下に畳んであります |
 | ページの位置がずれる | 「ページの寸法が一致しません」の警告が出ていれば、位置同期は切ってあります |

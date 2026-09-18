@@ -1,7 +1,9 @@
 # クラウド LLM 対応とリポジトリ分離 設計
 
 - 日付: 2026-09-18
-- 状態: 承認済み（2026-09-18）。実装計画は未作成。実装未着手。
+- 状態: 承認済み（2026-09-18）。段階 1 は実装中。自動試験と型検査は通っているが、
+  **実 API キーでの疎通確認が未了**なので「実装済み」とはしない（Task 12 の裁定）。
+  2026-09-18 承認の追補（Azure OpenAI と画面内 API キー登録）は §13。
 - 合意済み: OpenAI 互換の汎用 endpoint、拡張は SecretStorage・Web は DPAPI、送信は明示 opt-in で画面に常時表示、分離は `git subtree split` で履歴を保つ。
 
 ## 1. 目的
@@ -53,6 +55,7 @@ export type ProviderConfig =
       temperature: number; timeoutMs: number }
   | { kind: 'openai'; baseUrl: string; apiKey: string; model: string;
       temperature: number; timeoutMs: number };
+  // 2026-09-18 の追補で { kind: 'azure'; ... } を足した。§13.1 を見ること。
 
 export function assertSendable(config: ProviderConfig, cloudAllowed: boolean): void;
 export function translate(args: TranslateArgs): Promise<string>;
@@ -142,6 +145,9 @@ docs が腐るうえ、意図しない送信先モデルへ課金が発生しう
 
 ### 7.1 キーの登録は CLI で行う
 
+> **2026-09-18 追補で変更。** 画面からも登録できるようにした。§13 を見ること。
+> CLI（`--set-key` / `--clear-key`）はそのまま残る。
+
 キーを受け取る HTTP API を**作らない**。この app は「API に起動時 token を要求し、token は
 ログにも HTML 以外にも出さない」という posture で作られている。そこへ平文のキーを受ける口を
 新設すると、その posture を下げることになる。
@@ -196,7 +202,7 @@ Node に DPAPI は無い。ネイティブモジュールはこの machine の S
 | 状況 | 扱い |
 |---|---|
 | `provider === 'openai'` かつ許可なし | 致命。許可の付け方を出す |
-| `provider === 'openai'` かつキー未登録 | 致命。`--set-key` を促す |
+| `provider === 'openai'` かつキー未登録 | ~~致命。`--set-key` を促す~~ → §13 で警告へ変更 |
 | `provider === 'openai'` で `GET {baseUrl}/models` が通らない | 警告。訳が出ないだけなので止めない |
 
 疎通確認の応答本文はログに出さない（キーやアカウント情報が混ざりうるため）。
@@ -267,3 +273,79 @@ GitHub の public リポジトリを 2 つ作り push する。リポジトリ�
 ## 12. 未確定
 
 - GitHub のリポジトリ名と説明。段階 3 の直前に確認する。これ以外に未確定な点は無い。
+
+## 13. 追補（2026-09-18 承認）: Azure OpenAI と画面内 API キー登録
+
+本体の設計を承認した同じ日に、次の 2 点を足すことが承認された。実装計画は
+`docs/superpowers/plans/2026-09-18-azure-key-management.md`。
+
+### 13.1 Azure OpenAI v1 を正式な provider にする
+
+`ProviderConfig` に `kind: 'azure'` を足す。本文・SSE・エラー分類は `openai` と同じ実装を
+使い、違いは次の 3 点だけに閉じる。
+
+```ts
+| { kind: 'azure'; baseUrl: string; apiKey: string; model: string;
+    temperature: number; timeoutMs: number }
+```
+
+- **送信先**: `https://<resource>.openai.azure.com/openai/v1` または
+  `https://<resource>.services.ai.azure.com/openai/v1` だけを受け付ける。
+  `normalizeAzureBaseUrl()` が末尾を `/openai/v1` へ揃え、`https` 以外・非公式ホスト・
+  非標準ポート・利用者情報・query・fragment を拒否する。`openai` と違い、ループバックの
+  `http:` は許さない（Azure に手元の互換サーバーは存在しない）。
+- **認証**: `Authorization: Bearer` ではなく `api-key` ヘッダー。
+- **モデル**: 値はモデル名ではなく **Azure の deployment 名**として扱う。
+
+これ以前の `azure` という設定値は暗黙に `ollama` へ落ちていた。これを止めるのが主眼である。
+
+利用者向けの設定名は `azure`。generic な OpenAI 互換 endpoint は `openai` のまま残す。
+
+### 13.2 PDF Web アプリの画面から API キーを登録する
+
+§7.1 の「キーを受け取る HTTP API を作らない」を撤回する。**撤回してよい理由**は、
+その口が既存の防御の内側にあることが確かめられたためである。`/api/settings/api-key` は
+ほかの API とまったく同じく、起動時 token・Host 検査・Origin 検査を通る。外部の頁から
+叩くことはできない。一方、CLI だけに限ると「起動窓とは別に端末を開く」手間が常に要り、
+実際には利用者が平文を環境変数へ置く方へ流れる。
+
+```
+GET    /api/settings/api-key   -> { configured, cloud, target }
+PUT    /api/settings/api-key      { apiKey } を受け取り、DPAPI で暗号化して保存する
+DELETE /api/settings/api-key      保存済みのキーを消す
+```
+
+- 応答は**登録の有無**（`configured`）、クラウド provider かどうか（`cloud`）、送信先の
+  ホスト名（`target`）だけ。**キーそのもの、断片、長さを返さない。**
+- ヘッダーへ載せる値なので、制御文字（改行を含む）を含むキーは 400 で断る。断りの文に
+  受け取った値を含めない。
+- 保存は §7.2 の DPAPI のまま。平文 JSON の fallback は作らない。
+- `cloud` が偽（ローカルの Ollama）なら画面に鍵欄を出さず、`PUT`/`DELETE` は 409 で断る。
+
+### 13.3 鍵は起動時ではなくセッション作成時に読む
+
+`AppDeps.connection`（起動時に一度だけ解決）を `AppDeps.resolveConnection()` に変える。
+セッションを作るたびに、そのときの保存値から接続を組み直す。これにより、鍵を登録した
+あとサーバーを立て直さずに訳し始められる。鍵が無ければセッション作成を 409 `no-api-key`
+で断る。**原文は送らない。**
+
+送信の可否を確かめる `assertSendable()` は、起動時ではなくこの `resolveConnection()` で
+呼ぶ。起動時の検査は「鍵以外」に限る。
+
+### 13.4 preflight は鍵未登録で止めない
+
+鍵未登録は**警告**とする。致命にすると、鍵を登録する画面そのものへ辿り着けない。
+送信許可（`PDF_JA_CLOUD_ALLOWED`）とモデル名（`PDF_JA_MODEL`）は環境変数でしか直せない
+ので、致命のまま残す。
+
+### 13.5 既知の限界
+
+翻訳中のセッションは、そのセッションを作ったときの接続を持ち続ける。画面から鍵を削除
+しても、**そのセッションの送信は止まらない**。次のセッションから止まる。確実に止めるには
+サーバーを終了する。
+
+### 13.6 この追補の状態
+
+自動試験（unit・web・E2E・integration）と型検査は通っている。**実 API キーによる疎通は
+未実施**であり、§本体の「段階 1 実装済み」への更新は、Task 12 の裁定どおり実キーでの
+実翻訳が両アプリで成功するまで行わない。

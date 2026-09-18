@@ -103,7 +103,7 @@
     "start:web": "node dist-web/server.cjs",
     "pretest:e2e:web": "npm run build:web",
     "test:e2e:web": "playwright test --config playwright.pdf.config.ts",
-    "package": "npm run build && vsce package --allow-missing-repository --out md-ja-preview.vsix",
+    "package": "npm run build && vsce package --allow-missing-repository --no-rewrite-relative-links --out md-ja-preview.vsix",
     "pretest:integration": "npm run build",
     "test:integration": "vscode-test",
     "test": "npm run typecheck && npm run test:unit"

@@ -17,7 +17,7 @@
 ## VS Code 拡張（Markdown）
 
 英語の Markdown を、既定ではローカルの Ollama で日本語へ逐次翻訳し、**別パネルに表示する**
-VS Code 拡張です。明示的に許可すれば、OpenAI 互換 API も選べます。
+VS Code 拡張です。明示的に許可すれば、OpenAI 互換 API と Azure OpenAI も選べます。
 
 ## 前提
 
@@ -57,8 +57,8 @@ ollama pull qwen3.5:9b-q4_K_M
 
 | 設定 | 既定値 | 説明 |
 | --- | --- | --- |
-| `mdJaPreview.provider` | `ollama` | `ollama` または `openai`。クラウドは opt-in です。 |
-| `mdJaPreview.baseUrl` | `https://api.openai.com/v1` | `openai` のときの送信先。API キーは書きません。 |
+| `mdJaPreview.provider` | `ollama` | `ollama` / `openai` / `azure`。クラウドは opt-in です。 |
+| `mdJaPreview.baseUrl` | `https://api.openai.com/v1` | `openai` / `azure` のときの送信先。API キーは書きません。 |
 | `mdJaPreview.cloudAllowed` | `false` | 原文を外部へ送ることを明示的に許可します。 |
 | `mdJaPreview.endpoint` | `http://127.0.0.1:11434` | Ollama のベース URL。 |
 | `mdJaPreview.model` | （空） | 翻訳モデル。空なら Ollama だけ `qwen3.5:9b-q4_K_M` を使います。クラウド用の既定モデル名は無いため、利用者が明示指定します。 |
@@ -73,6 +73,42 @@ ollama pull qwen3.5:9b-q4_K_M
 API キーはコマンド **`md-ja: API キーを登録`** で登録します。設定ファイルには書きません。
 キーは VS Code の `SecretStorage` に保存されます。クラウドで動いている間は、原文の送信先
 ホストがプレビュー上部に常時表示されます。
+
+### OpenAI 互換 endpoint を使う
+
+```jsonc
+{
+  "mdJaPreview.provider": "openai",
+  "mdJaPreview.baseUrl": "https://api.openai.com/v1",
+  "mdJaPreview.cloudAllowed": true,
+  "mdJaPreview.model": "<利用するモデル名>"
+}
+```
+
+認証は `Authorization: Bearer <キー>` です。
+
+### Azure OpenAI を使う
+
+```jsonc
+{
+  "mdJaPreview.provider": "azure",
+  "mdJaPreview.baseUrl": "https://<resource>.openai.azure.com/openai/v1",
+  "mdJaPreview.cloudAllowed": true,
+  "mdJaPreview.model": "<deployment 名>"
+}
+```
+
+`azure` のときは次の 3 点が `openai` と違います。
+
+- 送信先は `https://<resource>.openai.azure.com/openai/v1` または
+  `https://<resource>.services.ai.azure.com/openai/v1` だけです。ほかのホスト、
+  `http`、非標準ポート、query 付きの URL は拒否します。
+- 認証は `api-key` ヘッダーです。
+- `mdJaPreview.model` にはモデル名ではなく **Azure の deployment 名**を入れます。
+  Azure の画面で「デプロイ」に付けた名前で、基盤モデル名とは違うことがあります。
+
+どちらの場合も、キーの登録はコマンドパレットの **`md-ja: API キーを登録`** です。
+入力欄は伏せ字で、値は設定ファイルにも `settings.json` にも書かれません。
 
 ---
 
