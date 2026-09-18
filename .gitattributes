@@ -4,4 +4,5 @@
 # バイナリ。改行変換をすると壊れる。
 *.pdf binary
 *.png binary
+*.ico binary
 *.vsix binary

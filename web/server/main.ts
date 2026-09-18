@@ -18,6 +18,7 @@ import {
   type Extractor,
 } from './extractor';
 import { createApp } from './http';
+import { formatProblems, preflight } from './preflight';
 import { Scheduler } from './scheduler';
 import { allowedHostsFor, createToken } from './security';
 import { Storage, defaultDataDir } from './storage';
@@ -167,13 +168,54 @@ function openBrowser(url: string): void {
   }
 }
 
+/**
+ * ショートカットから起動すると、失敗しても窓が一瞬で消えて何も読めない。
+ * `--launcher` のときだけ、キーを押すまで開いたままにする。
+ */
+async function holdWindow(): Promise<void> {
+  if (!process.stdin.isTTY) return;
+  process.stdout.write('\n閉じるには何かキーを押してください… ');
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  await new Promise<void>((resolve) => process.stdin.once('data', () => resolve()));
+  process.stdin.setRawMode(false);
+  process.stdin.pause();
+  process.stdout.write('\n');
+}
+
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
-  const settings = readSettings();
+  const launcher = argv.includes('--launcher');
+
+  let settings: ServerSettings;
+  try {
+    settings = readSettings();
+  } catch (error) {
+    console.error(`設定を読めません: ${(error as Error).message}`);
+    if (launcher) await holdWindow();
+    return 1;
+  }
+
+  // 前提を先に確かめる。足りないものは「症状」と「直し方」で出す。
+  const problems = await preflight({
+    staticRoot: settings.staticRoot,
+    image: settings.image,
+    python: settings.python,
+    endpoint: settings.connection.endpoint,
+    model: settings.model,
+  });
+  for (const line of formatProblems(problems)) console.log(line);
+  if (problems.some((problem) => problem.level === 'fatal')) {
+    if (launcher) await holdWindow();
+    return 1;
+  }
+  if (problems.length > 0) console.log('');
+
   let running: RunningServer;
   try {
     running = await startServer(settings);
   } catch (error) {
     console.error(`起動できません: ${(error as Error).message}`);
+    if (launcher) await holdWindow();
     return 1;
   }
 
@@ -183,7 +225,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   console.log(`  配信元  : ${settings.staticRoot}`);
   console.log(`  抽出    : ${settings.extractorKind === 'docker' ? settings.image : settings.python}`);
   console.log(`  Ollama  : ${settings.connection.endpoint} (${settings.model})`);
-  console.log('  終了    : Ctrl+C');
+  console.log(`  終了    : ${launcher ? 'この窓を閉じる（または Ctrl+C）' : 'Ctrl+C'}`);
 
   if (argv.includes('--open')) openBrowser(running.url);
 

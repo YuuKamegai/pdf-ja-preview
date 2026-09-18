@@ -82,6 +82,17 @@ npm run build:web
 npm run start:web                  # http://127.0.0.1:7391/
 ```
 
+セットアップには **PowerShell 7 (`pwsh`)** が要ります。Windows 11 には同梱されていません
+（`winget install --id Microsoft.PowerShell`）。理由は
+[docs/pdf-web.md](docs/pdf-web.md#なぜ-powershell-7-が要るのか) にあります。
+
+デスクトップから起動したいときは、ショートカットを作ります（`.exe` は作りません。
+Smart App Control が未署名の実行ファイルを弾くためです）。こちらは 5.1 でも動きます。
+
+```powershell
+powershell -File scripts/install-shortcut.ps1
+```
+
 ---
 
 ## 開発

@@ -50,6 +50,7 @@
 | Node.js | 24.15.0 | サーバーと画面 |
 | Docker Desktop | Engine 29.4.0 | 抽出（Docling）をコンテナで動かす |
 | Ollama | 起動していること | 翻訳 |
+| PowerShell 7 (`pwsh`) | 7.x | セットアップと検証のスクリプト。Windows 同梱の 5.1 では読めません |
 | Python | 3.13 | 抽出まわりの試験だけ（本体には不要） |
 
 ### なぜ抽出だけコンテナなのか
@@ -61,6 +62,23 @@
 抽出だけをコンテナへ閉じ込め、サーバーとの境界は「stdout に JSON 一件」に保っています。
 Smart App Control の無い環境では、`PDF_JA_PYTHON` を指定すればローカルの Python で
 同じワーカーを動かせます（コンテナは不要になります）。
+
+### なぜ PowerShell 7 が要るのか
+
+`scripts/setup-pdf.ps1` と `scripts/validate-pdf.ps1` は BOM の無い UTF-8 です。
+**Windows 同梱の PowerShell 5.1 は BOM の無いファイルを ANSI として読む**ため、
+日本語のコメントが化け、化けた末尾が改行を飲み込んで構文エラーになります
+（実測: `setup-pdf.ps1` で 16 件、`validate-pdf.ps1` で 4 件）。PowerShell 7 は
+BOM 無し UTF-8 を既定にするので、そのまま読めます。
+
+**PowerShell 7 は Windows 11 に同梱されていません。** 入っていなければ次で入ります。
+
+```powershell
+winget install --id Microsoft.PowerShell --source winget
+```
+
+`scripts/install-shortcut.ps1` と `scripts/make-icon.ps1` には BOM を付けてあるので、
+5.1 でも 7 でも動きます。ショートカットを作るだけなら PowerShell 7 は要りません。
 
 ## セットアップ
 
@@ -92,6 +110,37 @@ npm run start:web
 ```powershell
 node dist-web/server.cjs --open
 ```
+
+### ダブルクリックで起動する
+
+デスクトップにショートカットを置けます。一度作れば、あとはそれを押すだけです。
+
+```powershell
+powershell -File scripts/install-shortcut.ps1
+```
+
+`-Destination <フォルダ>` で置き場所を、`-Name <名前>` で名前を変えられます。既にある
+ものを置き換えるときは `-Force` を付けます。
+
+**実行ファイル（.exe）は作りません。** この machine は Smart App Control が Enforce で、
+自分で作った未署名の `.exe` は OS に弾かれます（torch の DLL や Playwright のブラウザと
+同じ壁）。ショートカットが指すのは署名済みの `node.exe` なので、この制限に掛かりません。
+
+アイコンは `media/pdf-ja.ico` です。作り直すなら `scripts/make-icon.ps1` を実行します。
+どちらも BOM 付きなので、PowerShell は 5.1 でも 7 でも構いません。
+
+### 起動前の前提チェック
+
+起動時に次を確かめ、足りなければ症状と直し方を出します。
+
+| 見るもの | 足りないとき |
+|---|---|
+| `dist-web/` の配信資産 | **止まる**。`npm run build:web` を促す |
+| 抽出器（Docker の応答と抽出イメージ、または `PDF_JA_PYTHON`） | **止まる**。Docker Desktop の起動か `setup-pdf.ps1` を促す |
+| Ollama の応答と既定モデル | **止まらない**。訳が出ないだけなので警告に留める |
+
+ショートカットから起動したときは `--launcher` が付きます。この印があると、止まった
+ときに窓を開いたままにして、何が足りないかを読めるようにします。
 
 ## 設定（環境変数）
 
