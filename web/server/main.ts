@@ -7,6 +7,7 @@
 
 import { spawn } from 'node:child_process';
 import type { Server } from 'node:http';
+import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
 
 import type { OllamaConfig } from '../../src/translate/ollama';
@@ -21,6 +22,7 @@ import { createApp } from './http';
 import { formatProblems, preflight } from './preflight';
 import { Scheduler } from './scheduler';
 import { allowedHostsFor, createToken } from './security';
+import { SettingsStore } from './settings-store';
 import { Storage, defaultDataDir } from './storage';
 
 export const DEFAULT_PORT = 7391;
@@ -183,6 +185,38 @@ async function holdWindow(): Promise<void> {
   process.stdout.write('\n');
 }
 
+/** 画面に出さずに 1 行読む。TTY でなければ拒否する。 */
+async function readSecretLine(prompt: string): Promise<string> {
+  if (!process.stdin.isTTY) {
+    throw new Error('API キーは対話的にのみ入力できます（履歴やログへ残さないため）。');
+  }
+  process.stdout.write(prompt);
+  const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+  // 入力をエコーしない。
+  const output = rl as unknown as { _writeToOutput?: (text: string) => void };
+  output._writeToOutput = () => undefined;
+  try {
+    const value = await new Promise<string>((resolve) => rl.question('', resolve));
+    process.stdout.write('\n');
+    return value;
+  } finally {
+    rl.close();
+  }
+}
+
+async function manageKey(argv: string[], dataDir: string): Promise<number> {
+  const store = new SettingsStore(dataDir);
+  if (argv.includes('--clear-key')) {
+    await store.clearApiKey();
+    console.log('API キーを削除しました。');
+    return 0;
+  }
+  const value = await readSecretLine('API キー（入力は表示されません）: ');
+  await store.setApiKey(value);
+  console.log(`API キーを暗号化して保存しました: ${store.path}`);
+  return 0;
+}
+
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   const launcher = argv.includes('--launcher');
 
@@ -193,6 +227,16 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     console.error(`設定を読めません: ${(error as Error).message}`);
     if (launcher) await holdWindow();
     return 1;
+  }
+
+  if (argv.includes('--set-key') || argv.includes('--clear-key')) {
+    try {
+      return await manageKey(argv, settings.dataDir);
+    } catch (error) {
+      console.error((error as Error).message);
+      if (launcher) await holdWindow();
+      return 1;
+    }
   }
 
   // 前提を先に確かめる。足りないものは「症状」と「直し方」で出す。
