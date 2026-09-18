@@ -85,6 +85,24 @@ test('上限を超える出力は殺して output-too-large', async () => {
   assert.equal(await codeOf(run('huge')), 'output-too-large');
 });
 
+test('打ち切りの後始末は一度だけ走る', async () => {
+  // stdout が上限を超えると 'data' は届き続ける。そのたびに後始末を呼ぶと、
+  // 1 回の実行で taskkill を何百回も起動することになる。子が死ぬのが遅れるほど
+  // chunk が増え、起動がさらに増える。機械が飽和して、無関係な試験まで巻き添えになる。
+  let cancels = 0;
+  const error = await codeOf(
+    runExtractorProcess({
+      command: process.execPath,
+      args: [WORKER, '--mode', 'huge'],
+      signal: new AbortController().signal,
+      timeoutMs: 20_000,
+      onCancel: () => { cancels += 1; },
+    }),
+  );
+  assert.equal(error, 'output-too-large');
+  assert.equal(cancels, 1, `後始末が ${cancels} 回走った`);
+});
+
 test('タイムアウトで打ち切る', async () => {
   assert.equal(await codeOf(run('spin', [], { timeoutMs: 300 })), 'timeout');
 });

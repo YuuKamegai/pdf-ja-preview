@@ -153,8 +153,15 @@ export function runExtractorProcess(options: ProcessOptions): Promise<PdfDocumen
       else resolve(document as PdfDocument);
     };
 
+    // 打ち切りは一度だけ。stdout が上限を超えても 'data' は届き続けるので、
+    // そのたびに殺しにいくと 1 回の実行で taskkill を何百回も起動することになる
+    // （実測 274 回）。子が死ぬのが遅れるほど chunk が増えて起動も増える、という
+    // 悪循環になり、機械が飽和して無関係な処理まで巻き添えになる。
+    let stopping = false;
     const stop = (error: ExtractorError): void => {
       if (failure === undefined) failure = error;
+      if (stopping) return;
+      stopping = true;
       options.onCancel?.();
       killTree(child, options.killCommand);
     };
