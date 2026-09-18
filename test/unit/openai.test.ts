@@ -299,3 +299,60 @@ test('呼び出し側の中断はそのまま伝える', async () => {
     (error: unknown) => (error as Error).name === 'AbortError',
   );
 });
+
+test('タイムアウトは可用性の問題として投げる（呼び出し側は中断していない）', async () => {
+  // fetch 呼び出し自体（1 つ目の try/catch）でタイムアウトが発火する経路。
+  // 呼び出し側の signal は最後まで abort しない — timeout.aborted の分岐だけを踏む。
+  const impl = (async (_url: string, options: RequestInit = {}) => {
+    const combined = options.signal as AbortSignal;
+    return await new Promise<Response>((_resolve, reject) => {
+      combined.addEventListener('abort', () => reject(combined.reason));
+    });
+  }) as unknown as typeof globalThis.fetch;
+  await assert.rejects(
+    translateWithOpenAi({
+      source: 'x',
+      headingContext: '',
+      config: { ...config, timeoutMs: 1 },
+      signal: new AbortController().signal,
+      fetchImpl: impl,
+    }),
+    (error: unknown) =>
+      error instanceof ProviderUnavailableError &&
+      error.message.includes('api.openai.com') &&
+      error.message.includes('ms を超えました') &&
+      !error.message.includes('sk-test'),
+  );
+});
+
+test('ストリーム読み取り中の中断はそのまま伝える（可用性エラーに包まない）', async () => {
+  // 1 チャンク届いた後、reader.read() のループが回っている最中に
+  // 呼び出し側が abort する経路（2 つ目の try/catch）。
+  const controller = new AbortController();
+  let pulls = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(ctrl) {
+      pulls += 1;
+      if (pulls === 1) {
+        ctrl.enqueue(
+          new TextEncoder().encode('data: {"choices":[{"delta":{"content":"A"}}]}\n\n'),
+        );
+        return;
+      }
+      controller.abort();
+      ctrl.error(new DOMException('The operation was aborted.', 'AbortError'));
+    },
+  });
+  const impl = (async () => new Response(stream, { status: 200 })) as unknown as typeof globalThis.fetch;
+  await assert.rejects(
+    translateWithOpenAi({
+      source: 'x',
+      headingContext: '',
+      config,
+      signal: controller.signal,
+      fetchImpl: impl,
+    }),
+    (error: unknown) =>
+      (error as Error).name === 'AbortError' && !(error instanceof ProviderUnavailableError),
+  );
+});
