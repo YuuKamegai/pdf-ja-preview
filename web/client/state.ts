@@ -94,29 +94,45 @@ export function countStates(state: Snapshot, document: PdfDocument): Counts {
   return { total: wanted.size, translated, failed, pending };
 }
 
-// ---- API キーの欄 ---------------------------------------------------------
+// ---- 接続 -----------------------------------------------------------------
 
-/** サーバーが返す鍵の状態。鍵そのものは入らない。 */
-export interface ApiKeyStatus {
-  configured: boolean;
-  cloud: boolean;
+export interface ConnectionView {
+  name: string;
+  provider: 'ollama' | 'openai' | 'azure';
+  /** 送信先。鍵は含まない。 */
+  baseUrl: string;
+  /** 表示用のホスト名だけ。 */
   target: string;
+  model: string;
+  trust: 'loopback' | 'cloud-allowed';
+  configured: boolean;
 }
 
-export interface ApiKeyView {
-  /** 鍵欄を出すか。ローカルの Ollama では出さない。 */
-  visible: boolean;
+export interface ConnectionList {
+  selected: string;
+  connections: ConnectionView[];
+}
+
+export interface ConnectionDisplay {
   label: string;
-  /** 削除できるか。未登録なら押せない。 */
-  canClear: boolean;
+  /** そのまま訳せるか。 */
+  usable: boolean;
+  /** 鍵を入れれば使えるか。 */
+  needsKey: boolean;
+  /** 使えない理由。使えるなら空。 */
+  reason: string;
 }
 
-/** 鍵の欄に出す文言。鍵そのものは受け取らないので、決して表示できない。 */
-export function describeApiKey(status: ApiKeyStatus): ApiKeyView {
-  if (!status.cloud) return { visible: false, label: '', canClear: false };
-  return {
-    visible: true,
-    label: status.configured ? `登録済み（${status.target}）` : `未登録（${status.target}）`,
-    canClear: status.configured,
-  };
+/** 接続 1 件の見せ方。鍵そのものは受け取らないので、決して表示できない。 */
+export function describeConnection(connection: ConnectionView): ConnectionDisplay {
+  const label = `${connection.name}（${connection.target}${
+    connection.model === '' ? '' : ` / ${connection.model}`
+  }）`;
+  if (connection.model === '') {
+    return { label, usable: false, needsKey: false, reason: 'モデルが未設定です。' };
+  }
+  if (connection.provider !== 'ollama' && !connection.configured) {
+    return { label, usable: false, needsKey: true, reason: 'API キーが登録されていません。' };
+  }
+  return { label, usable: true, needsKey: false, reason: '' };
 }

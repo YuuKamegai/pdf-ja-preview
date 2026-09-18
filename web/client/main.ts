@@ -7,15 +7,16 @@
 
 import type { PdfBlock, PdfDocument, Region } from '../shared/document';
 import type { Snapshot } from '../shared/protocol';
-import { Api, ApiError, readToken } from './api';
+import { Api, ApiError, readToken, type ConnectionInput } from './api';
 import { candidatesAt, regionsForPage } from './geometry';
 import { PdfView } from './pdf-view';
 import {
   applySessionResponse,
   countStates,
-  describeApiKey,
+  describeConnection,
   reduceEvent,
-  type ApiKeyStatus,
+  type ConnectionList,
+  type ConnectionView,
 } from './state';
 import { TranslationView } from './translation-view';
 
@@ -23,7 +24,6 @@ const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
 interface Elements {
   file: HTMLInputElement;
-  model: HTMLInputElement;
   page: HTMLInputElement;
   pageCount: HTMLElement;
   prev: HTMLButtonElement;
@@ -32,11 +32,23 @@ interface Elements {
   zoomOut: HTMLButtonElement;
   rotate: HTMLButtonElement;
   pause: HTMLButtonElement;
-  apiKeyGroup: HTMLElement;
-  apiKey: HTMLInputElement;
-  saveApiKey: HTMLButtonElement;
-  clearApiKey: HTMLButtonElement;
-  apiKeyStatus: HTMLElement;
+  connection: HTMLSelectElement;
+  manageConnections: HTMLButtonElement;
+  dialog: HTMLDialogElement;
+  connectionList: HTMLElement;
+  cName: HTMLInputElement;
+  cProvider: HTMLSelectElement;
+  cBaseUrl: HTMLInputElement;
+  cModel: HTMLInputElement;
+  cApiKey: HTMLInputElement;
+  cApiKeyRow: HTMLElement;
+  cTrust: HTMLInputElement;
+  cTrustRow: HTMLElement;
+  cError: HTMLElement;
+  cSave: HTMLButtonElement;
+  cTest: HTMLButtonElement;
+  cNew: HTMLButtonElement;
+  cClose: HTMLButtonElement;
   clearCache: HTMLButtonElement;
   close: HTMLButtonElement;
   extraction: HTMLElement;
@@ -67,6 +79,11 @@ export class App {
   #extraction: AbortController | undefined;
   #candidates: PdfBlock[] = [];
   #candidateIndex = 0;
+  #connections: ConnectionList | undefined;
+  /** 直前に出した接続の警告。直ったときに、これと同じ文だけを消す。 */
+  #connectionWarning = '';
+  /** 管理画面で編集中の接続名。新規なら undefined。 */
+  #editing: string | undefined;
   /** 読み込みが重ならないようにする。 */
   #opening: Promise<void> = Promise.resolve();
   #openGeneration = 0;
@@ -104,15 +121,13 @@ export class App {
     e.pause.addEventListener('click', () => void this.togglePause());
     e.clearCache.addEventListener('click', () => void this.clearCache());
     e.close.addEventListener('click', () => void this.closeDocument());
-    e.saveApiKey.addEventListener('click', () => void this.saveApiKey());
-    e.clearApiKey.addEventListener('click', () => void this.clearApiKey());
-    // 貼り付けてそのまま Enter を押す人が多い。取りこぼさない。
-    e.apiKey.addEventListener('keydown', (event) => {
-      if ((event as KeyboardEvent).key !== 'Enter') return;
-      event.preventDefault();
-      void this.saveApiKey();
-    });
-    e.model.addEventListener('change', () => void this.changeModel(e.model.value.trim()));
+    e.connection.addEventListener('change', () => void this.selectConnection(e.connection.value));
+    e.manageConnections.addEventListener('click', () => this.openConnections());
+    e.cProvider.addEventListener('change', () => this.#syncProviderFields());
+    e.cSave.addEventListener('click', () => void this.saveConnection());
+    e.cTest.addEventListener('click', () => void this.testConnection());
+    e.cNew.addEventListener('click', () => this.#fillForm(undefined));
+    e.cClose.addEventListener('click', () => e.dialog.close());
 
     this.#elements.pdf.addEventListener('click', (event) => this.#onPdfClick(event as MouseEvent));
 
@@ -210,9 +225,8 @@ export class App {
 
   async #startSession(generation: number): Promise<void> {
     if (!this.#documentId || !this.#document) return;
-    const model = this.#elements.model.value.trim();
     try {
-      const snapshot = await this.#api.createSession(this.#documentId, model);
+      const snapshot = await this.#api.createSession(this.#documentId);
       if (generation !== this.#openGeneration) {
         await this.#api.deleteSession(snapshot.sessionId).catch(() => undefined);
         return;
@@ -348,16 +362,6 @@ export class App {
     }
   }
 
-  async changeModel(model: string): Promise<void> {
-    const snapshot = this.#snapshot;
-    if (!snapshot || model === '' || model === snapshot.model) return;
-    try {
-      this.#apply(await this.#api.patchSession(snapshot.sessionId, { model }));
-    } catch (error) {
-      this.#banner(this.#describe(error));
-    }
-  }
-
   async retry(blockId: string): Promise<void> {
     const snapshot = this.#snapshot;
     if (!snapshot) return;
@@ -378,62 +382,191 @@ export class App {
     }
   }
 
-  // ---- API キー -----------------------------------------------------------
+  // ---- 接続 ---------------------------------------------------------------
 
   /**
-   * 鍵の状態を聞き直して欄へ反映する。
+   * 一覧を聞き直して画面へ反映する。
    *
-   * 受け取るのは「登録されているか」だけ。鍵そのものは決して画面へ戻らない。
+   * 受け取るのは名前・送信先・モデル・鍵の有無だけ。鍵そのものは決して戻らない。
    */
-  async refreshApiKey(): Promise<void> {
+  async refreshConnections(): Promise<void> {
     try {
-      this.#showApiKey(await this.#api.getApiKeyStatus());
-    } catch {
-      // 状態が読めなくても閲覧はできる。欄は出さない。
-      this.#showApiKey({ configured: false, cloud: false, target: '' });
+      this.#showConnections(await this.#api.listConnections());
+    } catch (error) {
+      this.#banner(this.#describe(error));
     }
   }
 
-  async saveApiKey(): Promise<void> {
-    const value = this.#elements.apiKey.value.trim();
-    if (value === '') {
-      this.#banner('API キーを入力してください。');
+  async selectConnection(name: string): Promise<void> {
+    if (name === '' || name === this.#connections?.selected) return;
+    try {
+      this.#showConnections(await this.#api.selectConnection(name));
+    } catch (error) {
+      this.#banner(this.#describe(error));
+      return;
+    }
+    // 切り替えはサーバー側で開いているセッションへ配られる。手元に無ければ始める。
+    // 使えない接続なら #showConnections() が理由を出しているので、ここでは消さない。
+    if (!this.#snapshot) await this.#resumeAfterConnection();
+  }
+
+  openConnections(): void {
+    this.#fillForm(this.#currentConnection());
+    this.#elements.dialog.showModal();
+  }
+
+  async saveConnection(): Promise<void> {
+    const e = this.#elements;
+    const input: ConnectionInput = {
+      name: e.cName.value.trim(),
+      provider: e.cProvider.value as ConnectionInput['provider'],
+      baseUrl: e.cBaseUrl.value.trim(),
+      model: e.cModel.value.trim(),
+      trust: e.cProvider.value === 'ollama' || !e.cTrust.checked ? 'loopback' : 'cloud-allowed',
+    };
+    const key = e.cApiKey.value.trim();
+    if (key !== '') input.apiKey = key;
+
+    try {
+      const known = this.#connections?.connections.some(
+        (connection) => connection.name === this.#editing,
+      );
+      const list =
+        this.#editing !== undefined && known
+          ? await this.#api.updateConnection(this.#editing, input)
+          : await this.#api.addConnection(input);
+      // 鍵を入力欄に残さない。画面に出したままにしない。
+      e.cApiKey.value = '';
+      this.#editing = input.name;
+      this.#showConnections(list);
+      this.#formError('');
+      if (!this.#snapshot) await this.#resumeAfterConnection();
+    } catch (error) {
+      this.#formError(this.#describe(error));
+    }
+  }
+
+  async removeConnection(name: string): Promise<void> {
+    try {
+      this.#showConnections(await this.#api.removeConnection(name));
+      if (this.#editing === name) this.#fillForm(this.#currentConnection());
+      this.#formError('');
+    } catch (error) {
+      this.#formError(this.#describe(error));
+    }
+  }
+
+  async testConnection(): Promise<void> {
+    const name = this.#editing;
+    if (name === undefined) {
+      this.#formError('先に保存してください。');
       return;
     }
     try {
-      const status = await this.#api.setApiKey(value);
-      // 入力欄に残さない。画面に出したままにしない。
-      this.#elements.apiKey.value = '';
-      this.#showApiKey(status);
-      this.#banner('API キーを暗号化して保存しました。');
-      // 鍵待ちで始められなかった文書があれば、ここから訳し始める。
-      await this.#resumeAfterKey();
+      const result = await this.#api.testConnection(name);
+      this.#formError(result.detail);
     } catch (error) {
-      this.#banner(this.#describe(error));
+      this.#formError(this.#describe(error));
     }
   }
 
-  async clearApiKey(): Promise<void> {
-    try {
-      this.#showApiKey(await this.#api.clearApiKey());
-      this.#elements.apiKey.value = '';
-      this.#banner('API キーを削除しました。');
-    } catch (error) {
-      this.#banner(this.#describe(error));
-    }
-  }
-
-  /** 鍵が無くてセッションを作れなかった文書を、登録後に訳し始める。 */
-  async #resumeAfterKey(): Promise<void> {
+  /** 接続を入れたあと、鍵待ちで始められなかった文書を訳し始める。 */
+  async #resumeAfterConnection(): Promise<void> {
     if (this.#snapshot || !this.#documentId || !this.#document) return;
     await this.#startSession(this.#openGeneration);
   }
 
-  #showApiKey(status: ApiKeyStatus): void {
-    const view = describeApiKey(status);
-    this.#elements.apiKeyGroup.hidden = !view.visible;
-    this.#elements.apiKeyStatus.textContent = view.label;
-    this.#elements.clearApiKey.disabled = !view.canClear;
+  #currentConnection(): ConnectionView | undefined {
+    const list = this.#connections;
+    return list?.connections.find((connection) => connection.name === list.selected);
+  }
+
+  #showConnections(list: ConnectionList): void {
+    this.#connections = list;
+    const e = this.#elements;
+
+    e.connection.replaceChildren(
+      ...list.connections.map((connection) => {
+        const option = document.createElement('option');
+        option.value = connection.name;
+        option.textContent = describeConnection(connection).label;
+        option.selected = connection.name === list.selected;
+        return option;
+      }),
+    );
+
+    e.connectionList.replaceChildren(
+      ...list.connections.map((connection) => {
+        const view = describeConnection(connection);
+        const row = document.createElement('li');
+        row.dataset.testid = `connection-row-${connection.name}`;
+        if (connection.name === list.selected) row.classList.add('selected');
+
+        const detail = document.createElement('span');
+        detail.className = 'detail';
+        detail.textContent =
+          `${view.label} — ` +
+          (connection.provider === 'ollama'
+            ? 'ローカル'
+            : connection.configured
+              ? '登録済み'
+              : '鍵は未登録');
+        row.append(detail);
+
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.textContent = '編集';
+        edit.addEventListener('click', () => this.#fillForm(connection));
+        row.append(edit);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '削除';
+        remove.addEventListener('click', () => void this.removeConnection(connection.name));
+        row.append(remove);
+
+        return row;
+      }),
+    );
+
+    const selected = this.#currentConnection();
+    const warning =
+      selected && !describeConnection(selected).usable
+        ? `${selected.name}: ${describeConnection(selected).reason}`
+        : '';
+    if (warning !== '') this.#banner(warning);
+    // 直った接続の警告だけを消す。他の理由で出ているバナーは残す。
+    else if (this.#connectionWarning !== '' && this.#elements.banner.textContent === this.#connectionWarning) {
+      this.#banner('');
+    }
+    this.#connectionWarning = warning;
+  }
+
+  /** 編集する 1 件を入力欄へ移す。undefined なら新規。鍵欄は常に空にする。 */
+  #fillForm(connection: ConnectionView | undefined): void {
+    const e = this.#elements;
+    this.#editing = connection?.name;
+    e.cName.value = connection?.name ?? '';
+    e.cProvider.value = connection?.provider ?? 'ollama';
+    e.cBaseUrl.value = connection?.baseUrl ?? 'http://127.0.0.1:11434';
+    e.cModel.value = connection?.model ?? '';
+    e.cTrust.checked = connection?.trust === 'cloud-allowed';
+    e.cApiKey.value = '';
+    this.#formError('');
+    this.#syncProviderFields();
+  }
+
+  /** ローカルの接続では鍵も送信許可も要らない。欄ごと隠す。 */
+  #syncProviderFields(): void {
+    const e = this.#elements;
+    const local = e.cProvider.value === 'ollama';
+    e.cApiKeyRow.hidden = local;
+    e.cTrustRow.hidden = local;
+  }
+
+  #formError(message: string): void {
+    this.#elements.cError.textContent = message;
+    this.#elements.cError.hidden = message === '';
   }
 
   // ---- 位置対応 -----------------------------------------------------------
@@ -510,7 +643,6 @@ export class App {
       `訳済み ${counts.translated} / ${counts.total}` +
       (counts.failed > 0 ? `（失敗 ${counts.failed}）` : '');
     this.#elements.pause.textContent = snapshot.paused ? '再開' : '一時停止';
-    this.#elements.model.value = snapshot.model;
     if (snapshot.error) this.#banner(snapshot.error.message);
   }
 
@@ -538,7 +670,6 @@ function must<T extends Element>(id: string): T {
 export function boot(): App {
   const elements: Elements = {
     file: must('file'),
-    model: must('model'),
     page: must('page'),
     pageCount: must('page-count'),
     prev: must('prev'),
@@ -547,11 +678,23 @@ export function boot(): App {
     zoomOut: must('zoom-out'),
     rotate: must('rotate'),
     pause: must('pause'),
-    apiKeyGroup: must('api-key-group'),
-    apiKey: must('api-key'),
-    saveApiKey: must('save-api-key'),
-    clearApiKey: must('clear-api-key'),
-    apiKeyStatus: must('api-key-status'),
+    connection: must('connection'),
+    manageConnections: must('manage-connections'),
+    dialog: must('connections'),
+    connectionList: must('connection-list'),
+    cName: must('c-name'),
+    cProvider: must('c-provider'),
+    cBaseUrl: must('c-base-url'),
+    cModel: must('c-model'),
+    cApiKey: must('c-api-key'),
+    cApiKeyRow: must('c-api-key-row'),
+    cTrust: must('c-trust'),
+    cTrustRow: must('c-trust-row'),
+    cError: must('c-error'),
+    cSave: must('c-save'),
+    cTest: must('c-test'),
+    cNew: must('c-new'),
+    cClose: must('c-close'),
     clearCache: must('clear-cache'),
     close: must('close'),
     extraction: must('extraction-status'),
@@ -560,10 +703,8 @@ export function boot(): App {
     pdf: must('pdf'),
     translation: must('translation'),
   };
-  const defaultModel = document.querySelector('meta[name="pdf-ja-model"]')?.getAttribute('content');
-  if (defaultModel) elements.model.value = decodeURIComponent(defaultModel);
   const app = new App(new Api(readToken()), elements);
-  void app.refreshApiKey();
+  void app.refreshConnections();
   return app;
 }
 

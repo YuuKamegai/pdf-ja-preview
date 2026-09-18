@@ -29,24 +29,10 @@
       </span>
 
       <span class="group">
-        <label for="model" class="muted">モデル</label>
-        <input id="model" type="text" value="qwen3.5:9b-q4_K_M" aria-label="モデル" />
+        <label for="connection" class="muted">接続</label>
+        <select id="connection" aria-label="接続" data-testid="connection"></select>
+        <button id="manage-connections" type="button">接続を管理</button>
         <button id="pause" type="button">一時停止</button>
-      </span>
-
-      <span class="group api-key" id="api-key-group" data-testid="api-key-group" hidden>
-        <label for="api-key" class="muted">APIキー</label>
-        <input
-          id="api-key"
-          type="password"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder="貼り付けて登録"
-          aria-label="APIキー"
-        />
-        <button id="save-api-key" type="button">登録</button>
-        <button id="clear-api-key" type="button">削除</button>
-        <span id="api-key-status" class="muted" data-testid="api-key-status"></span>
       </span>
 
       <span class="group">
@@ -67,6 +53,44 @@
       <section id="pdf" class="pane" aria-label="原文"></section>
       <section id="translation" class="pane" aria-label="訳文"></section>
     </main>
+    <dialog id="connections" class="connections" data-testid="connections">
+      <h2>接続</h2>
+      <ul id="connection-list" class="connection-list"></ul>
+      <form id="connection-form" class="connection-form" onsubmit="return false">
+        <label>名前 <input id="c-name" type="text" required /></label>
+        <label>種類
+          <select id="c-provider">
+            <option value="ollama">ローカル Ollama</option>
+            <option value="openai">OpenAI 互換</option>
+            <option value="azure">Azure OpenAI</option>
+          </select>
+        </label>
+        <label>送信先 <input id="c-base-url" type="text" required /></label>
+        <label>モデル / deployment 名 <input id="c-model" type="text" /></label>
+        <label id="c-api-key-row">APIキー
+          <input
+            id="c-api-key"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="貼り付けて保存"
+            aria-label="APIキー"
+          />
+        </label>
+        <label id="c-trust-row" class="trust">
+          <input id="c-trust" type="checkbox" />
+          原文をこの送信先へ送ることを許可する（原文が外部のサーバーへ出ます）
+        </label>
+        <p id="c-error" class="banner" data-testid="connection-error" hidden></p>
+        <menu>
+          <button id="c-save" type="button">保存</button>
+          <button id="c-test" type="button">接続テスト</button>
+          <button id="c-new" type="button">新規</button>
+          <button id="c-close" type="button">閉じる</button>
+        </menu>
+      </form>
+    </dialog>
+
     <footer class="storage-note">抽出した原文と訳文は、このPCに保存されます。「保存した訳を消す」で文書のキャッシュを削除し、再翻訳します。OCRには対応していません。</footer>
 
     <script type="module" src="./app.js"></script>

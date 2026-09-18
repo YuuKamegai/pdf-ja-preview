@@ -198,15 +198,6 @@ test('文章の無いページはそう言う', async ({ page }) => {
   await expect(page.getByTestId('banner')).toContainText('文章を抽出できません');
 });
 
-test('モデルを変えると訳し直す', async ({ page }) => {
-  await open(page, 'two-column.pdf');
-  await expect(page.getByTestId('translation-block-texts-1')).toContainText('左段の本文');
-
-  await page.getByRole('textbox', { name: 'モデル' }).fill('other-model');
-  await page.getByRole('textbox', { name: 'モデル' }).press('Enter');
-  await expect(page.getByTestId('translation-block-texts-1')).toContainText('左段の本文');
-});
-
 test('一時停止と再開ができる', async ({ page }) => {
   await openWithSession(page, 'two-column.pdf', 'texts-1');
   const pause = page.getByRole('button', { name: '一時停止' });
@@ -279,30 +270,39 @@ test('外部への通信をしない', async ({ page }) => {
 /** 鍵を扱うクラウド構成の fixture は隣のポートに立っている（playwright 設定と対）。 */
 const cloudBase = `http://127.0.0.1:${Number(process.env.PDF_JA_E2E_PORT ?? 7398) + 1}`;
 
-test('ローカルの Ollama では API キーの欄を出さない', async ({ page }) => {
+test('ローカルだけの構成では接続が 1 件しか出ない', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByTestId('api-key-group')).toBeHidden();
+  await expect(page.getByLabel('接続')).toHaveValue('local');
+  await expect(page.getByTestId('cloud-notice')).toBeHidden();
 });
 
-test('クラウドでは画面から API キーを登録して訳し始められる', async ({ page }) => {
+test('接続を切り替えると、その場で送信先が変わる', async ({ page }) => {
   await page.goto(`${cloudBase}/`);
-  await expect(page.getByTestId('api-key-status')).toContainText('未登録');
-  await expect(page.getByTestId('api-key-status')).toContainText('api.openai.com');
+  await expect(page.getByLabel('接続')).toHaveValue('local');
+  await expect(page.getByTestId('cloud-notice')).toBeHidden();
 
-  // 鍵が無いままでは訳せない。理由を画面で言う。
   await page.getByLabel('PDFを開く', { exact: true }).setInputFiles(fixture('two-column.pdf'));
+  await expect(page.getByTestId('translation-block-texts-1')).toContainText('左段の本文');
+
+  // 鍵の無いクラウド接続へ切り替えると、訳は始まらず理由が出る。
+  await page.getByLabel('接続').selectOption('cloud');
   await expect(page.getByTestId('banner')).toContainText('API キー');
 
-  await page.getByLabel('APIキー').fill('sk-e2e-0123456789');
-  await page.getByRole('button', { name: '登録' }).click();
-
-  await expect(page.getByTestId('api-key-status')).toContainText('登録済み');
+  await page.getByRole('button', { name: '接続を管理' }).click();
+  // 「保存した訳を消す」と紛れるので、管理画面の中に絞る。
+  const dialog = page.getByTestId('connections');
+  await dialog.getByLabel('APIキー').fill('sk-e2e-0123456789');
+  await dialog.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(page.getByTestId('connection-row-cloud')).toContainText('登録済み');
   // 登録した鍵を画面に残さない。
-  await expect(page.getByLabel('APIキー')).toHaveValue('');
-  // 再起動せずに、そのまま訳が出る。
-  await expect(page.getByTestId('translation-block-texts-1')).toContainText('左段の本文');
-  await expect(page.getByTestId('cloud-notice')).toContainText('api.openai.com');
+  await expect(dialog.getByLabel('APIキー')).toHaveValue('');
+  await dialog.getByRole('button', { name: '閉じる', exact: true }).click();
 
-  await page.getByRole('button', { name: '削除' }).click();
-  await expect(page.getByTestId('api-key-status')).toContainText('未登録');
+  await expect(page.getByTestId('cloud-notice')).toContainText('api.openai.com');
+  await expect(page.getByTestId('translation-block-texts-1')).toContainText('左段の本文');
+
+  // ローカルへ戻すと送信先の表示が消え、キャッシュから訳が戻る。
+  await page.getByLabel('接続').selectOption('local');
+  await expect(page.getByTestId('cloud-notice')).toBeHidden();
+  await expect(page.getByTestId('translation-block-texts-1')).toContainText('左段の本文');
 });

@@ -128,6 +128,7 @@ test('画面へ出す形に鍵は入らない', () => {
   assert.deepEqual(view, {
     name: 'azure-mini',
     provider: 'azure',
+    baseUrl: 'https://example.services.ai.azure.com/openai/v1',
     target: 'example.services.ai.azure.com',
     model: 'gpt-test-deploy',
     trust: 'cloud-allowed',

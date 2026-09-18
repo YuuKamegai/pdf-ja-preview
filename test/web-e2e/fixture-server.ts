@@ -101,6 +101,7 @@ const keys = new Map<string, string>();
 const view = (entry: FixtureConnection) => ({
   name: entry.name,
   provider: entry.provider,
+  baseUrl: entry.baseUrl,
   target: new URL(entry.baseUrl).host,
   model: entry.model,
   trust: entry.trust,

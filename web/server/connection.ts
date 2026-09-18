@@ -31,7 +31,9 @@ export interface Connection {
 export interface ConnectionView {
   name: string;
   provider: ProviderKind;
-  /** ホスト名だけ。パスも query も含めない。 */
+  /** 送信先。編集で入れ直させないため、そのまま返す。鍵は含まない。 */
+  baseUrl: string;
+  /** 表示用のホスト名だけ。 */
   target: string;
   model: string;
   trust: Trust;
@@ -162,6 +164,7 @@ export function viewOf(connection: Connection): ConnectionView {
   return {
     name: connection.name,
     provider: connection.provider,
+    baseUrl: connection.baseUrl,
     target,
     model: connection.model,
     trust: connection.trust,

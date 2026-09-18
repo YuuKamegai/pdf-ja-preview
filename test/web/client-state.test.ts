@@ -14,7 +14,7 @@ import {
   applySessionResponse,
   blockState,
   countStates,
-  describeApiKey,
+  describeConnection,
   reduceEvent,
 } from '../../web/client/state';
 import type { PdfBlock, PdfDocument } from '../../web/shared/document';
@@ -321,25 +321,58 @@ test('応答にエラーが無ければ手元のエラーも消す', () => {
   assert.equal(applySessionResponse(current, snapshot()).error, undefined);
 });
 
-// ---- API キーの欄 ---------------------------------------------------------
+// ---- 接続の欄 -------------------------------------------------------------
 
-// Mutation: ローカルでも鍵欄を出すと失敗する。
-test('ローカルの Ollama では鍵欄を出さない', () => {
-  const shown = describeApiKey({ configured: false, cloud: false, target: '' });
-  assert.equal(shown.visible, false);
-  assert.equal(shown.canClear, false);
-  assert.equal(shown.label, '');
+const LOCAL = {
+  name: 'local',
+  provider: 'ollama' as const,
+  baseUrl: 'http://127.0.0.1:11434',
+  target: '127.0.0.1:11434',
+  model: 'qwen3.5:9b-q4_K_M',
+  trust: 'loopback' as const,
+  configured: false,
+};
+
+const CLOUD = {
+  name: 'azure-mini',
+  provider: 'azure' as const,
+  baseUrl: 'https://example.services.ai.azure.com/openai/v1',
+  target: 'example.services.ai.azure.com',
+  model: 'gpt-test-deploy',
+  trust: 'cloud-allowed' as const,
+  configured: true,
+};
+
+// Mutation: ローカルでも鍵を要求すると失敗する。
+test('ローカルの接続は鍵が無くても使える', () => {
+  const view = describeConnection(LOCAL);
+  assert.equal(view.usable, true);
+  assert.equal(view.needsKey, false);
+  assert.match(view.label, /local/);
+  assert.match(view.label, /127\.0\.0\.1:11434/);
 });
 
-test('クラウドでは登録の有無と送信先を出す', () => {
-  const missing = describeApiKey({ configured: false, cloud: true, target: 'api.openai.com' });
-  assert.equal(missing.visible, true);
-  assert.equal(missing.canClear, false);
-  assert.match(missing.label, /未登録/);
-  assert.match(missing.label, /api\.openai\.com/);
+test('鍵のあるクラウドの接続は使える', () => {
+  const view = describeConnection(CLOUD);
+  assert.equal(view.usable, true);
+  assert.equal(view.needsKey, false);
+});
 
-  const present = describeApiKey({ configured: true, cloud: true, target: 'api.openai.com' });
-  assert.equal(present.visible, true);
-  assert.equal(present.canClear, true);
-  assert.match(present.label, /登録済み/);
+// Mutation: 鍵の無いクラウド接続を使えると言うと失敗する。
+test('鍵の無いクラウドの接続は使えないと言う', () => {
+  const view = describeConnection({ ...CLOUD, configured: false });
+  assert.equal(view.usable, false);
+  assert.equal(view.needsKey, true);
+  assert.match(view.reason, /API キー/);
+});
+
+// Mutation: モデル未設定を見落とすと失敗する。
+test('モデル未設定の接続は使えないと言う', () => {
+  const view = describeConnection({ ...LOCAL, model: '' });
+  assert.equal(view.usable, false);
+  assert.match(view.reason, /モデル/);
+});
+
+test('表示に鍵は現れない', () => {
+  assert.equal(JSON.stringify(describeConnection(CLOUD)).includes('sk-'), false);
 });

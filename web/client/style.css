@@ -41,15 +41,83 @@ body {
   display: none;
 }
 
-.toolbar .api-key input {
-  width: 14rem;
+.toolbar select {
+  max-width: 22rem;
+}
+
+.connections {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1rem;
+  min-width: 26rem;
+  max-width: 40rem;
+}
+
+.connections h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.connection-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.connection-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.connection-list li.selected {
+  font-weight: 600;
+}
+
+.connection-list .detail {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.connection-form label {
+  display: grid;
+  grid-template-columns: 11rem 1fr;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.connection-form input[type='text'],
+.connection-form input[type='password'],
+.connection-form select {
+  width: 100%;
+}
+
+.connection-form input[type='password'] {
   /* 伏せ字でも「何か入っている」ことは分かるようにする。 */
   font-family: monospace;
 }
 
-.toolbar .api-key button[disabled] {
-  opacity: 0.5;
-  cursor: default;
+.connection-form .trust {
+  grid-template-columns: auto 1fr;
+}
+
+.connection-form menu {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
 }
 
 .toolbar .status {

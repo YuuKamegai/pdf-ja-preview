@@ -592,6 +592,7 @@ function fakeConnections() {
   const view = (entry: FakeEntry) => ({
     name: entry.name,
     provider: entry.provider,
+    baseUrl: entry.baseUrl,
     target: new URL(entry.baseUrl).host,
     model: entry.model,
     trust: entry.trust,
@@ -669,6 +670,7 @@ test('接続の一覧は鍵を載せず、選択中を返す', async (t) => {
   assert.deepEqual(body.connections[0], {
     name: 'local',
     provider: 'ollama',
+    baseUrl: 'http://127.0.0.1:11434',
     target: '127.0.0.1:11434',
     model: 'm1',
     trust: 'loopback',

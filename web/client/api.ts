@@ -7,7 +7,7 @@
  */
 
 import { parseDocument, type PdfDocument } from '../shared/document';
-import type { ApiKeyStatus } from './state';
+import type { ConnectionList } from './state';
 import type {
   DocumentAccepted,
   DocumentStatus,
@@ -18,6 +18,16 @@ import type {
 } from '../shared/protocol';
 
 const TOKEN_HEADER = 'x-pdf-ja-token';
+
+/** 接続の登録内容。`apiKey` は省略で据え置き、null で削除、文字列で登録。 */
+export interface ConnectionInput {
+  name: string;
+  provider: 'ollama' | 'openai' | 'azure';
+  baseUrl: string;
+  model: string;
+  trust: 'loopback' | 'cloud-allowed';
+  apiKey?: string | null;
+}
 
 export class ApiError extends Error {
   readonly status: number;
@@ -71,27 +81,52 @@ export class Api {
     return response;
   }
 
-  // ---- API キー -----------------------------------------------------------
+  // ---- 接続 ---------------------------------------------------------------
 
-  /** 登録されているかどうかだけを聞く。鍵は返ってこない。 */
-  async getApiKeyStatus(): Promise<ApiKeyStatus> {
-    const response = await this.#call('/api/settings/api-key');
-    return (await response.json()) as ApiKeyStatus;
+  async listConnections(): Promise<ConnectionList> {
+    return (await (await this.#call('/api/connections')).json()) as ConnectionList;
   }
 
-  /** 鍵を預ける。戻り値は登録の有無だけで、鍵は含まない。 */
-  async setApiKey(apiKey: string): Promise<ApiKeyStatus> {
-    const response = await this.#call('/api/settings/api-key', {
+  /** 追加する。鍵は送るだけで、返ってはこない。 */
+  async addConnection(input: ConnectionInput): Promise<ConnectionList> {
+    const response = await this.#call('/api/connections', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    return (await response.json()) as ConnectionList;
+  }
+
+  async updateConnection(name: string, input: ConnectionInput): Promise<ConnectionList> {
+    const response = await this.#call(`/api/connections/${encodeURIComponent(name)}`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ apiKey }),
+      body: JSON.stringify(input),
     });
-    return (await response.json()) as ApiKeyStatus;
+    return (await response.json()) as ConnectionList;
   }
 
-  async clearApiKey(): Promise<ApiKeyStatus> {
-    const response = await this.#call('/api/settings/api-key', { method: 'DELETE' });
-    return (await response.json()) as ApiKeyStatus;
+  async removeConnection(name: string): Promise<ConnectionList> {
+    const response = await this.#call(`/api/connections/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+    return (await response.json()) as ConnectionList;
+  }
+
+  async selectConnection(name: string): Promise<ConnectionList> {
+    const response = await this.#call('/api/connections/selected', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    return (await response.json()) as ConnectionList;
+  }
+
+  async testConnection(name: string): Promise<{ ok: boolean; detail: string }> {
+    const response = await this.#call(`/api/connections/${encodeURIComponent(name)}/test`, {
+      method: 'POST',
+    });
+    return (await response.json()) as { ok: boolean; detail: string };
   }
 
   async uploadDocument(bytes: BlobPart, signal?: AbortSignal): Promise<DocumentAccepted> {
@@ -136,11 +171,12 @@ export class Api {
     return `${this.#base}/api/documents/${encodeURIComponent(id)}/pdf`;
   }
 
-  async createSession(documentId: string, model: string): Promise<Snapshot> {
+  /** モデルは選択中の接続が決める。ここでは指定しない。 */
+  async createSession(documentId: string): Promise<Snapshot> {
     const response = await this.#call('/api/sessions', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ documentId, model }),
+      body: JSON.stringify({ documentId }),
     });
     return (await response.json()) as Snapshot;
   }
@@ -216,4 +252,4 @@ export class Api {
   }
 }
 
-export type { ApiKeyStatus, PdfDocument, Snapshot, ServerEvent };
+export type { ConnectionList, PdfDocument, Snapshot, ServerEvent };
