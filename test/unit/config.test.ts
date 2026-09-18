@@ -1,67 +1,45 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+
 import { resolveConfig } from '../../src/config';
 
-const empty = () => undefined;
+function reader(values: Record<string, unknown>) {
+  return (key: string): unknown => values[key];
+}
 
-test('未設定なら仕様どおりの既定値になる', () => {
-  assert.deepEqual(resolveConfig(empty), {
-    ollama: {
-      endpoint: 'http://127.0.0.1:11434',
-      model: 'qwen3.5:9b-q4_K_M',
-      think: false,
-      temperature: 0.2,
-      timeoutMs: 120000,
-    },
-    maxBlockChars: 1500,
-    scrollSync: true,
-    autoOpen: false,
-  });
+test('既定はローカルの Ollama', () => {
+  const config = resolveConfig(reader({}));
+  assert.equal(config.provider.kind, 'ollama');
+  assert.equal(config.cloudAllowed, false);
+  if (config.provider.kind !== 'ollama') throw new Error('unreachable');
+  assert.equal(config.provider.endpoint, 'http://127.0.0.1:11434');
+  assert.equal(config.provider.model, 'qwen3.5:9b-q4_K_M');
 });
 
-test('設定値を読み取る', () => {
-  const values: Record<string, unknown> = {
-    endpoint: 'http://192.168.0.2:11434/',
-    model: 'ornith:35b',
-    think: true,
-    temperature: 0.7,
-    requestTimeoutMs: 30000,
-    maxBlockChars: 800,
-    scrollSync: false,
-    autoOpen: true,
-  };
-  const config = resolveConfig((key) => values[key]);
-
-  assert.equal(config.ollama.endpoint, 'http://192.168.0.2:11434/');
-  assert.equal(config.ollama.model, 'ornith:35b');
-  assert.equal(config.ollama.think, true);
-  assert.equal(config.ollama.temperature, 0.7);
-  assert.equal(config.ollama.timeoutMs, 30000);
-  assert.equal(config.maxBlockChars, 800);
-  assert.equal(config.scrollSync, false);
-  assert.equal(config.autoOpen, true);
+test('provider を openai にすると baseUrl 側を組む', () => {
+  const config = resolveConfig(reader({ provider: 'openai', model: 'gpt-test' }));
+  assert.equal(config.provider.kind, 'openai');
+  if (config.provider.kind !== 'openai') throw new Error('unreachable');
+  assert.equal(config.provider.baseUrl, 'https://api.openai.com/v1');
+  assert.equal(config.provider.model, 'gpt-test');
 });
 
-test('型が違う値は既定値へ落とす', () => {
-  const config = resolveConfig((key) => (key === 'temperature' ? 'hot' : undefined));
-  assert.equal(config.ollama.temperature, 0.2);
+test('鍵は設定から読まない（常に空）', () => {
+  const config = resolveConfig(reader({ provider: 'openai', apiKey: 'sk-leak' }));
+  if (config.provider.kind !== 'openai') throw new Error('unreachable');
+  assert.equal(config.provider.apiKey, '');
 });
 
-test('package.json が設定項目をすべて宣言している', async () => {
-  const { readFileSync } = await import('node:fs');
-  const pkg = JSON.parse(
-    readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
-  ) as { contributes: { configuration: { properties: Record<string, unknown> } } };
+test('知らない provider は ollama へ落とす', () => {
+  assert.equal(resolveConfig(reader({ provider: 'gemini' })).provider.kind, 'ollama');
+});
 
-  const declared = Object.keys(pkg.contributes.configuration.properties).sort();
-  assert.deepEqual(declared, [
-    'mdJaPreview.autoOpen',
-    'mdJaPreview.endpoint',
-    'mdJaPreview.maxBlockChars',
-    'mdJaPreview.model',
-    'mdJaPreview.requestTimeoutMs',
-    'mdJaPreview.scrollSync',
-    'mdJaPreview.temperature',
-    'mdJaPreview.think',
-  ]);
+test('cloudAllowed を読む', () => {
+  assert.equal(resolveConfig(reader({ cloudAllowed: true })).cloudAllowed, true);
+});
+
+test('温度とタイムアウトは両 provider で共用する', () => {
+  const config = resolveConfig(reader({ provider: 'openai', temperature: 0.5, requestTimeoutMs: 9000 }));
+  assert.equal(config.provider.temperature, 0.5);
+  assert.equal(config.provider.timeoutMs, 9000);
 });

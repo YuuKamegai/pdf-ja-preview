@@ -16,6 +16,8 @@ test('コマンド実行と Markdown 表示で extension を activate する', (
   ) as { activationEvents: string[] };
   assert.deepEqual(pkg.activationEvents, [
     'onCommand:mdJaPreview.open',
+    'onCommand:mdJaPreview.setApiKey',
+    'onCommand:mdJaPreview.clearApiKey',
     'onLanguage:markdown',
   ]);
 });

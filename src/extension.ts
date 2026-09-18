@@ -6,7 +6,7 @@ import { PreviewPanel } from './panel/panel';
 import { blockIndexAtLine, lineForBlock, SyncGate } from './panel/sync';
 import { TranslationSession, type SessionEvent } from './session';
 import { SequentialQueue } from './translate/queue';
-import { translateBlock } from './translate/ollama';
+import { translate } from './translate/provider';
 
 interface Live {
   document: vscode.TextDocument;
@@ -24,10 +24,32 @@ export function activate(context: vscode.ExtensionContext): { events: SessionEve
   const events: SessionEvent[] = [];
   cachePromise = undefined;
 
+  const SECRET_KEY = 'mdJaPreview.apiKey';
+
   context.subscriptions.push(
     vscode.commands.registerCommand('mdJaPreview.open', () => open(context, events)),
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       if (editor) void autoOpen(context, events, editor);
+    }),
+    vscode.commands.registerCommand('mdJaPreview.setApiKey', async () => {
+      const value = await vscode.window.showInputBox({
+        prompt: 'クラウド provider の API キー',
+        password: true,
+        ignoreFocusOut: true,
+        placeHolder: 'sk-...',
+      });
+      if (value === undefined) return;
+      const trimmed = value.trim();
+      if (trimmed === '') {
+        void vscode.window.showWarningMessage('API キーが空です。登録しませんでした。');
+        return;
+      }
+      await context.secrets.store(SECRET_KEY, trimmed);
+      void vscode.window.showInformationMessage('API キーを登録しました。');
+    }),
+    vscode.commands.registerCommand('mdJaPreview.clearApiKey', async () => {
+      await context.secrets.delete(SECRET_KEY);
+      void vscode.window.showInformationMessage('API キーを削除しました。');
     }),
   );
 
@@ -103,10 +125,10 @@ async function open(context: vscode.ExtensionContext, events: SessionEvent[]): P
   if (live !== owned || owned.disposed) return;
 
   const session = new TranslationSession({
-    model: config.ollama.model,
+    model: config.provider.model,
     maxBlockChars: config.maxBlockChars,
     translate: (source, headingContext, signal) =>
-      translateBlock({ source, headingContext, config: config.ollama, signal }),
+      translate({ source, headingContext, config: config.provider, signal }),
     enqueue: (job) => queue.enqueue(job),
     cacheGet: (model, source) => cache.get(model, source),
     cacheSet: (model, source, ja) => cache.set(model, source, ja),
