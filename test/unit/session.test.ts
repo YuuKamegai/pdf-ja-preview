@@ -9,6 +9,7 @@ import {
   ProviderAuthError,
   ProviderConfigError,
   ProviderRateLimitError,
+  ProviderUnavailableError,
 } from '../../src/translate/errors';
 import { SequentialQueue } from '../../src/translate/queue';
 
@@ -163,7 +164,7 @@ test('1 ブロックの失敗は後続の翻訳を止めない', async () => {
 
 test('Ollama 未起動ならバナーを出し、原文表示のまま打ち切る', async () => {
   const h = harness(async () => {
-    throw new OllamaUnavailableError('接続できません');
+    throw new OllamaUnavailableError('Ollama へ接続できません: http://127.0.0.1:11434');
   });
   await h.session.open('Alpha.\n\nBravo.\n');
 
@@ -329,6 +330,16 @@ test('打ち切ったら 2 つ目のブロックは訳さない', async () => {
   });
   await h.session.open('Alpha.\n\nBravo.\n');
   assert.deepEqual(h.calls, ['Alpha.'], '2 つ目は呼ばない');
+});
+
+test('クラウド接続の失敗はバナーに送信先ホストを出し、Ollama とは書かない', async () => {
+  const h = harness(async () => {
+    throw new ProviderUnavailableError('api.openai.com へ接続できません');
+  });
+  await h.session.open('Alpha.\n');
+  const banner = h.events.filter((e) => e.kind === 'banner').at(-1);
+  assert.ok(banner && banner.kind === 'banner' && banner.text.includes('api.openai.com'));
+  assert.ok(banner && banner.kind === 'banner' && !banner.text.includes('Ollama'));
 });
 
 test('dispose 後に遅い翻訳が完了しても cache 更新や後続翻訳をしない', async () => {

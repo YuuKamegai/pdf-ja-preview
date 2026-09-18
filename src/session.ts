@@ -50,9 +50,10 @@ function fatalBanner(error: unknown): string | undefined {
     return `設定を確かめてください: ${error.message}`;
   }
   if (error instanceof ProviderUnavailableError) {
-    // 既存試験が「Ollama」の語を前提にしている（ローカル既定の文言）ため残す。
-    // クラウド接続時も同じ分岐を通るが、原因は error.message 側で示す。
-    return `翻訳先（Ollama など）へ接続できません。原文のまま表示しています。（${error.message}）`;
+    // 送信先（Ollama / OpenAI 互換 API）は error.message 側が正しく持っている。
+    // ollama.ts / openai.ts はどちらも「<送信先> へ接続できません」を投げる実装なので、
+    // ここでホスト名を決め打ちしない。
+    return `翻訳先へ接続できません。原文のまま表示しています。（${error.message}）`;
   }
   return undefined;
 }
