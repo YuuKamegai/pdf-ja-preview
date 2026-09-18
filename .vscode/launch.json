@@ -2,12 +2,12 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Extension",
-      "type": "extensionHost",
+      "name": "Run PDF",
+      "type": "node",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
-      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-      "preLaunchTask": "npm: build"
+      "program": "${workspaceFolder}/dist-web/server.cjs",
+      "args": ["--open"],
+      "cwd": "${workspaceFolder}"
     }
   ]
 }

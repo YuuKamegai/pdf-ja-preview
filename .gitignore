@@ -1,14 +1,10 @@
 node_modules/
-dist/
-out/
-.vscode-test/
-*.vsix
-.superpowers/
 dist-web/
 .venv-pdf/
+.venv-pdf-fixtures/
 test-results/
 playwright-report/
 .playwright/
 __pycache__/
-.venv-pdf-fixtures/
 *.pyc
+.superpowers/

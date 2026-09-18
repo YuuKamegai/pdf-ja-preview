@@ -1,132 +1,25 @@
-# md-ja Preview
+# PDF 日本語プレビュー
 
-英語の文書を、ローカルの [Ollama](https://ollama.com/) で日本語へ逐次翻訳して**並べて読む**
-ための道具です。二つあります。
+英語の PDF を、原文と日本語訳を**左右に並べて読む**ためのローカル Web アプリです。原文は
+PDF.js でそのまま描画し、段落ごとに訳を対応づけます。抽出は Docling（コンテナ）、翻訳は
+既定ではローカルの [Ollama](https://ollama.com/) です。
 
-| | 対象 | 使い方 |
-|---|---|---|
-| **VS Code 拡張** | Markdown | 本 README（以下） |
-| **ローカル Web アプリ** | PDF | [docs/pdf-web.md](docs/pdf-web.md) |
-
-PDF 版は、送信先（ローカル Ollama / OpenAI 互換 / Azure OpenAI）を**画面の接続一覧から
-選んで切り替え**られます。VS Code 拡張は設定ファイルで切り替えます。
-
-どちらも翻訳結果を表示するだけで、**日本語版のファイルは作りません**。原文も書き換えません。
-既定ではこの machine から出ません。クラウドを明示的に許可したときだけ、原文が指定した
-送信先へ出ます。
-
----
-
-## VS Code 拡張（Markdown）
-
-英語の Markdown を、既定ではローカルの Ollama で日本語へ逐次翻訳し、**別パネルに表示する**
-VS Code 拡張です。明示的に許可すれば、OpenAI 互換 API と Azure OpenAI も選べます。
-
-## 前提
-
-- Ollama がローカルで動いていること（既定では `http://127.0.0.1:11434`）
-- 使うモデルを `ollama pull` 済みであること
-
-```bash
-ollama pull qwen3.5:9b-q4_K_M
-```
-
-モデルが未導入のときは、パネル上部のバナーに `ollama pull` コマンドが出ます。
-
-## 使い方
-
-1. 英語の Markdown ファイルを開く
-2. コマンドパレットから **`md-ja: 日本語プレビューを開く`** を実行する
-3. 右隣に訳文パネルが開く
-
-パネルを別ウィンドウへ出したいときは、パネルのタブを右クリックして
-`Move Panel into New Window` を選びます。
-
-## 挙動
-
-- 開いた瞬間に**全文が薄字の原文**で出て、**先頭のブロックから順に日本語へ差し替わります**。
-  翻訳は並列度 1 で、上から順に進みます。
-- **保存すると、内容が変わったブロックだけ**を訳し直します。変わっていないブロックは
-  日本語のまま残ります。
-- **コードフェンス・水平線・生 HTML は翻訳しません**。原文のまま確定します。
-- 訳文はブロックごとに構造検証され、**インラインコードやリンク URL が書き換わった訳は採用しません**
-  （そのブロックは原文のまま `error` 表示になり、クリックで再試行できます）。
-- 訳文は `globalStorage` にキャッシュされます。キーは **モデル名と原文**の組なので、
-  同じファイルを開き直せば即座に日本語が出ます。モデルを変えると訳し直します。
-- 原文エディタと訳文パネルのスクロールは双方向に同期します
-  （`mdJaPreview.scrollSync` で切れます）。
-
-## 設定
-
-| 設定 | 既定値 | 説明 |
-| --- | --- | --- |
-| `mdJaPreview.provider` | `ollama` | `ollama` / `openai` / `azure`。クラウドは opt-in です。 |
-| `mdJaPreview.baseUrl` | `https://api.openai.com/v1` | `openai` / `azure` のときの送信先。API キーは書きません。 |
-| `mdJaPreview.cloudAllowed` | `false` | 原文を外部へ送ることを明示的に許可します。 |
-| `mdJaPreview.endpoint` | `http://127.0.0.1:11434` | Ollama のベース URL。 |
-| `mdJaPreview.model` | （空） | 翻訳モデル。空なら Ollama だけ `qwen3.5:9b-q4_K_M` を使います。クラウド用の既定モデル名は無いため、利用者が明示指定します。 |
-| `mdJaPreview.think` | `false` | thinking を有効にする。有効にすると推論文が訳文へ混ざることがある。 |
-| `mdJaPreview.temperature` | `0.2` | 生成温度。 |
-| `mdJaPreview.requestTimeoutMs` | `120000` | 1 ブロックあたりのタイムアウト（ミリ秒）。 |
-| `mdJaPreview.maxBlockChars` | `1500` | この文字数を超えるリストを項目単位で分割する。 |
-| `mdJaPreview.scrollSync` | `true` | 原文エディタと訳文パネルのスクロールを同期する。 |
-| `mdJaPreview.autoOpen` | `false` | Markdown を開いたとき自動で日本語プレビューを開く。 |
-
-クラウドを使うには `provider`、`baseUrl`、`cloudAllowed`、`model` を確認してください。
-API キーはコマンド **`md-ja: API キーを登録`** で登録します。設定ファイルには書きません。
-キーは VS Code の `SecretStorage` に保存されます。クラウドで動いている間は、原文の送信先
-ホストがプレビュー上部に常時表示されます。
-
-### OpenAI 互換 endpoint を使う
-
-```jsonc
-{
-  "mdJaPreview.provider": "openai",
-  "mdJaPreview.baseUrl": "https://api.openai.com/v1",
-  "mdJaPreview.cloudAllowed": true,
-  "mdJaPreview.model": "<利用するモデル名>"
-}
-```
-
-認証は `Authorization: Bearer <キー>` です。
-
-### Azure OpenAI を使う
-
-```jsonc
-{
-  "mdJaPreview.provider": "azure",
-  "mdJaPreview.baseUrl": "https://<resource>.openai.azure.com/openai/v1",
-  "mdJaPreview.cloudAllowed": true,
-  "mdJaPreview.model": "<deployment 名>"
-}
-```
-
-`azure` のときは次の 3 点が `openai` と違います。
-
-- 送信先は `https://<resource>.openai.azure.com/openai/v1` または
-  `https://<resource>.services.ai.azure.com/openai/v1` だけです。ほかのホスト、
-  `http`、非標準ポート、query 付きの URL は拒否します。
-- 認証は `api-key` ヘッダーです。
-- `mdJaPreview.model` にはモデル名ではなく **Azure の deployment 名**を入れます。
-  Azure の画面で「デプロイ」に付けた名前で、基盤モデル名とは違うことがあります。
-
-どちらの場合も、キーの登録はコマンドパレットの **`md-ja: API キーを登録`** です。
-入力欄は伏せ字で、値は設定ファイルにも `settings.json` にも書かれません。
-
----
-
-## PDF 日本語プレビュー（ローカル Web アプリ）
-
-英語の PDF を、原文と日本語訳を左右に並べて読むためのローカルアプリです。原文は PDF.js で
-そのまま描画し、段落ごとに訳を対応づけます。抽出は Docling（コンテナ）、翻訳は既定では
-Ollama です。明示的に許可すれば OpenAI 互換 API も選べます。
+翻訳結果を表示するだけで、**日本語版の PDF は作りません**。原文も書き換えません。既定では
+この machine から出ません。クラウドを明示的に許可したときだけ、原文が指定した送信先へ
+出ます。送信先（ローカル Ollama / OpenAI 互換 / Azure OpenAI）は**画面の接続一覧から
+選んで切り替え**られます。
 
 セットアップ・起動・制約・保存先・復旧方法は **[docs/pdf-web.md](docs/pdf-web.md)** を
 読んでください。実文書での検証結果は
 [docs/validation/pdf-web-initial.md](docs/validation/pdf-web-initial.md) にあります。
 
+> Markdown 版（VS Code 拡張）は別リポジトリ `md-ja-preview` です。
+
+## 使い方
+
 ```powershell
 pwsh -File scripts/setup-pdf.ps1   # 初回だけ（Docker Desktop を起動しておく）
+npm install
 npm run build:web
 npm run start:web                  # http://127.0.0.1:7391/
 ```
@@ -142,22 +35,13 @@ Smart App Control が未署名の実行ファイルを弾くためです）。�
 powershell -File scripts/install-shortcut.ps1
 ```
 
----
+ショートカットはこのリポジトリの場所を焼き込みます。**リポジトリを移動したら
+`-Force` を付けて貼り直してください。**
 
 ## 開発
 
 ```bash
 npm install
-npm run build            # dist/extension.js と統合テストをバンドルする
-npm test                 # 型検査 + 単体テスト
-npm run test:integration # VS Code を起動して統合テスト（初回は VS Code の DL が走る）
-```
-
-VS Code でこのリポジトリを開き **F5** を押すと、拡張がロードされた別ウィンドウが起動します。
-
-PDF 側は次で確かめます。
-
-```bash
 npm run typecheck:web    # Web とブラウザ試験の型検査
 npm run test:web         # 契約・制御・API の単体試験
 npm run build:web        # dist-web/ を作る
@@ -167,3 +51,15 @@ npm run test:e2e:web     # 実ブラウザでの試験（Edge を使う）
 ```powershell
 & ./.venv-pdf/Scripts/python.exe -m pytest python/tests -q   # 抽出の正規化と前検査
 ```
+
+`test:web` と `test:e2e:web` は `127.0.0.1:7391` 前後のポートを使います。プレビューの
+サーバーを立てたまま走らせると `EADDRINUSE` で落ちるので、先に止めてください。
+
+## `src/translate/` は md-ja-preview と複製関係にあります
+
+`src/translate/`（`provider.ts`・`ollama.ts`・`openai.ts`・`errors.ts`）は VS Code 拡張
+リポジトリ `md-ja-preview` と**同じ内容の複製**です。npm パッケージへ切り出す運用は
+この規模に見合わないと判断し、複製を選びました。
+
+**片方を直したら、もう片方も見てください。** 送信先の判定（`assertSendable()`）や Azure の
+URL 制限のような安全に関わる決まりは、両方に同じものが入っていなければ意味がありません。

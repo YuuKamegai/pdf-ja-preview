@@ -1,101 +1,10 @@
 {
-  "name": "md-ja-preview",
-  "displayName": "md-ja Preview",
-  "description": "ローカル Ollama で英語 Markdown を日本語へ逐次翻訳して表示する",
+  "name": "pdf-ja-preview",
+  "description": "英語の PDF を、原文と日本語訳を左右に並べて読むためのローカル Web アプリ",
   "version": "0.1.0",
-  "publisher": "local",
   "private": true,
   "license": "MIT",
-  "engines": {
-    "vscode": "^1.137.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "main": "./dist/extension.js",
-  "activationEvents": [
-    "onCommand:mdJaPreview.open",
-    "onCommand:mdJaPreview.setApiKey",
-    "onCommand:mdJaPreview.clearApiKey",
-    "onLanguage:markdown"
-  ],
-  "contributes": {
-    "commands": [
-      {
-        "command": "mdJaPreview.open",
-        "title": "日本語プレビューを開く",
-        "category": "md-ja"
-      },
-      { "command": "mdJaPreview.setApiKey", "title": "API キーを登録", "category": "md-ja" },
-      { "command": "mdJaPreview.clearApiKey", "title": "API キーを削除", "category": "md-ja" }
-    ],
-    "configuration": {
-      "title": "md-ja Preview",
-      "properties": {
-        "mdJaPreview.provider": {
-          "type": "string",
-          "enum": ["ollama", "openai", "azure"],
-          "default": "ollama",
-          "description": "翻訳に使う provider。azure は Azure OpenAI v1 の公式 endpoint と deployment 名を使います。"
-        },
-        "mdJaPreview.baseUrl": {
-          "type": "string",
-          "default": "https://api.openai.com/v1",
-          "description": "provider が openai または azure のときの送信先。API キーはここに書かず、コマンドで登録します。"
-        },
-        "mdJaPreview.cloudAllowed": {
-          "type": "boolean",
-          "default": false,
-          "description": "原文を外部へ送ることを許可する。これを有効にしない限りクラウドは使えません。"
-        },
-        "mdJaPreview.endpoint": {
-          "type": "string",
-          "default": "http://127.0.0.1:11434",
-          "description": "Ollama のベース URL。"
-        },
-        "mdJaPreview.model": {
-          "type": "string",
-          "default": "",
-          "description": "翻訳に使うモデル名。Ollama は空なら既定モデルを使い、OpenAI はモデル名、Azure は deployment 名を必須とします。"
-        },
-        "mdJaPreview.think": {
-          "type": "boolean",
-          "default": false,
-          "description": "thinking を有効にする。有効にすると推論文が訳文へ混ざることがある。"
-        },
-        "mdJaPreview.temperature": {
-          "type": "number",
-          "default": 0.2,
-          "description": "生成温度。"
-        },
-        "mdJaPreview.requestTimeoutMs": {
-          "type": "number",
-          "default": 120000,
-          "description": "1 ブロックあたりのタイムアウト（ミリ秒）。"
-        },
-        "mdJaPreview.maxBlockChars": {
-          "type": "number",
-          "default": 1500,
-          "description": "この文字数を超えるリストを項目単位で分割する。"
-        },
-        "mdJaPreview.scrollSync": {
-          "type": "boolean",
-          "default": true,
-          "description": "原文エディタと訳文パネルのスクロールを同期する。"
-        },
-        "mdJaPreview.autoOpen": {
-          "type": "boolean",
-          "default": false,
-          "description": "Markdown を開いたとき自動で日本語プレビューを開く。"
-        }
-      }
-    }
-  },
   "scripts": {
-    "build": "node esbuild.mjs",
-    "watch": "node esbuild.mjs --watch",
-    "typecheck": "tsc --noEmit",
-    "test:unit": "node --import tsx --test \"test/unit/**/*.test.ts\"",
     "typecheck:web": "tsc --noEmit -p web/tsconfig.json && tsc --noEmit -p test/web-e2e/tsconfig.json",
     "test:web": "node --import tsx --test \"test/web/**/*.test.ts\"",
     "build:web": "node web/esbuild.mjs",
@@ -103,23 +12,14 @@
     "start:web": "node dist-web/server.cjs",
     "pretest:e2e:web": "npm run build:web",
     "test:e2e:web": "playwright test --config playwright.pdf.config.ts",
-    "package": "npm run build && vsce package --allow-missing-repository --no-rewrite-relative-links --out md-ja-preview.vsix",
-    "pretest:integration": "npm run build",
-    "test:integration": "vscode-test",
-    "test": "npm run typecheck && npm run test:unit"
+    "test": "npm run typecheck:web && npm run test:web"
   },
   "dependencies": {
-    "markdown-it": "^14.3.2",
     "pdfjs-dist": "6.3.289"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
-    "@types/markdown-it": "^14.2.0",
     "@types/node": "^24.13.4",
-    "@types/vscode": "^1.137.0",
-    "@vscode/test-cli": "^0.0.11",
-    "@vscode/test-electron": "^2.5.2",
-    "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.25.12",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3"
