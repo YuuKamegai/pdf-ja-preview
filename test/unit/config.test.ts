@@ -1,10 +1,27 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { resolveConfig } from '../../src/config';
 
 function reader(values: Record<string, unknown>) {
   return (key: string): unknown => values[key];
+}
+
+/**
+ * resolveConfig が実際に read() したキーを集める。
+ * provider の両分岐（ollama / openai）を通さないと baseUrl 側が漏れるので、
+ * 両方回して和集合を取る。
+ */
+function keysReadByResolveConfig(): Set<string> {
+  const seen = new Set<string>();
+  for (const provider of ['ollama', 'openai']) {
+    resolveConfig((key) => {
+      seen.add(key);
+      return key === 'provider' ? provider : undefined;
+    });
+  }
+  return seen;
 }
 
 test('既定はローカルの Ollama', () => {
@@ -42,4 +59,22 @@ test('温度とタイムアウトは両 provider で共用する', () => {
   const config = resolveConfig(reader({ provider: 'openai', temperature: 0.5, requestTimeoutMs: 9000 }));
   assert.equal(config.provider.temperature, 0.5);
   assert.equal(config.provider.timeoutMs, 9000);
+});
+
+test('resolveConfig が read() するキーと package.json の宣言が完全に一致する', () => {
+  const pkg = JSON.parse(
+    readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+  ) as { contributes: { configuration: { properties: Record<string, unknown> } } };
+
+  const declared = Object.keys(pkg.contributes.configuration.properties)
+    .map((key) => key.replace(/^mdJaPreview\./, ''))
+    .sort();
+
+  const actuallyRead = Array.from(keysReadByResolveConfig()).sort();
+
+  assert.deepEqual(
+    actuallyRead,
+    declared,
+    'resolveConfig() が read() するキーと package.json の設定宣言は一致するはず',
+  );
 });
