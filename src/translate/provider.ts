@@ -68,7 +68,7 @@ export function assertSendable(config: ProviderConfig, cloudAllowed: boolean): v
       `クラウドの送信先は https だけです（手元の互換サーバーは除く）: ${url.host}`,
     );
   }
-  if (!cloudAllowed) {
+  if (cloudAllowed !== true) {
     throw new ProviderConfigError(
       `原文を ${url.host} へ送る許可がありません。クラウドを使うには送信の許可を有効にしてください。`,
     );

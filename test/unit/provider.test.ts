@@ -55,6 +55,16 @@ test('クラウドは許可があれば通る', () => {
   assert.doesNotThrow(() => assertSendable(openai, true));
 });
 
+test('真偽値でない truthy な許可を受け付けない', () => {
+  for (const bogus of ['false', 'true', 1, {}, []] as unknown[]) {
+    assert.throws(
+      () => assertSendable(openai, bogus as boolean),
+      ProviderConfigError,
+      `許可として受け付けてはいけない値: ${JSON.stringify(bogus)}`,
+    );
+  }
+});
+
 test('クラウドの拒否理由に許可の付け方を書く', () => {
   assert.throws(() => assertSendable(openai, false), /許可/);
 });
