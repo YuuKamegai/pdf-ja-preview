@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 
 import { buildOpenAiRequestBody, parseSseData, type OpenAiConfig } from '../../src/translate/openai';
 import { SYSTEM_PROMPT } from '../../src/translate/ollama';
+import {
+  ModelMissingError,
+  ProviderAuthError,
+  ProviderRateLimitError,
+  ProviderUnavailableError,
+} from '../../src/translate/errors';
+import { translateWithOpenAi } from '../../src/translate/openai';
 
 const config: OpenAiConfig = {
   baseUrl: 'https://api.openai.com/v1',
@@ -67,4 +74,228 @@ test('壊れた JSON は例外にせず無視する', () => {
 
 test('data: の後の空白の有無を問わない', () => {
   assert.equal(parseSseData('data:{"choices":[{"delta":{"content":"a"}}]}'), 'a');
+});
+
+/** SSE の本文を、指定した切れ目で分割して返す fetch を作る。 */
+function sseFetch(chunks: string[], init: { status?: number; body?: string } = {}) {
+  const captured: { url?: string; headers?: Record<string, string>; body?: string } = {};
+  const impl = (async (url: string | URL, options: RequestInit = {}) => {
+    captured.url = String(url);
+    captured.headers = options.headers as Record<string, string>;
+    captured.body = options.body as string;
+    const status = init.status ?? 200;
+    if (status !== 200) {
+      return new Response(init.body ?? '{}', { status });
+    }
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const encoder = new TextEncoder();
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+        controller.close();
+      },
+    });
+    return new Response(stream, { status: 200 });
+  }) as unknown as typeof globalThis.fetch;
+  return { impl, captured };
+}
+
+test('SSE を繋いで訳文にする', async () => {
+  const { impl } = sseFetch([
+    'data: {"choices":[{"delta":{"content":"こん"}}]}\n\n',
+    'data: {"choices":[{"delta":{"content":"にちは"}}]}\n\n',
+    'data: [DONE]\n\n',
+  ]);
+  const result = await translateWithOpenAi({
+    source: 'Hello.',
+    headingContext: '',
+    config,
+    signal: new AbortController().signal,
+    fetchImpl: impl,
+  });
+  assert.equal(result, 'こんにちは');
+});
+
+test('イベントの途中で分割して届いても繋がる', async () => {
+  const { impl } = sseFetch([
+    'data: {"choices":[{"delta":{"con',
+    'tent":"あ"}}]}\n\ndata: {"choices":[{"delta":{"content":"い"}}]}\n\n',
+    'data: [DONE]\n\n',
+  ]);
+  const result = await translateWithOpenAi({
+    source: 'Hello.',
+    headingContext: '',
+    config,
+    signal: new AbortController().signal,
+    fetchImpl: impl,
+  });
+  assert.equal(result, 'あい');
+});
+
+test('onDelta へ逐次渡す', async () => {
+  const seen: string[] = [];
+  const { impl } = sseFetch([
+    'data: {"choices":[{"delta":{"content":"A"}}]}\n\n',
+    'data: {"choices":[{"delta":{"content":"B"}}]}\n\n',
+    'data: [DONE]\n\n',
+  ]);
+  await translateWithOpenAi({
+    source: 'Hello.',
+    headingContext: '',
+    config,
+    signal: new AbortController().signal,
+    fetchImpl: impl,
+    onDelta: (chunk) => seen.push(chunk),
+  });
+  assert.deepEqual(seen, ['A', 'B']);
+});
+
+test('URL とヘッダーを組み立てる', async () => {
+  const { impl, captured } = sseFetch(['data: [DONE]\n\n']);
+  await translateWithOpenAi({
+    source: 'Hello.',
+    headingContext: '',
+    config: { ...config, baseUrl: 'https://api.openai.com/v1/' },
+    signal: new AbortController().signal,
+    fetchImpl: impl,
+  });
+  assert.equal(captured.url, 'https://api.openai.com/v1/chat/completions');
+  assert.equal(captured.headers?.['authorization'], 'Bearer sk-test');
+  assert.equal(captured.headers?.['content-type'], 'application/json');
+});
+
+test('401 は認証の失敗として投げる', async () => {
+  const { impl } = sseFetch([], { status: 401 });
+  await assert.rejects(
+    translateWithOpenAi({
+      source: 'x',
+      headingContext: '',
+      config,
+      signal: new AbortController().signal,
+      fetchImpl: impl,
+    }),
+    (error: unknown) => error instanceof ProviderAuthError,
+  );
+});
+
+test('403 も認証の失敗として投げる', async () => {
+  const { impl } = sseFetch([], { status: 403 });
+  await assert.rejects(
+    translateWithOpenAi({
+      source: 'x',
+      headingContext: '',
+      config,
+      signal: new AbortController().signal,
+      fetchImpl: impl,
+    }),
+    (error: unknown) => error instanceof ProviderAuthError,
+  );
+});
+
+test('認証の失敗に API キーを含めない', async () => {
+  const { impl } = sseFetch([], { status: 401 });
+  await assert.rejects(
+    translateWithOpenAi({
+      source: 'x',
+      headingContext: '',
+      config,
+      signal: new AbortController().signal,
+      fetchImpl: impl,
+    }),
+    (error: unknown) => !(error as Error).message.includes('sk-test'),
+  );
+});
+
+test('404 はモデル欠落として投げる', async () => {
+  const { impl } = sseFetch([], { status: 404 });
+  await assert.rejects(
+    translateWithOpenAi({
+      source: 'x',
+      headingContext: '',
+      config,
+      signal: new AbortController().signal,
+      fetchImpl: impl,
+    }),
+    (error: unknown) => error instanceof ModelMissingError && error.model === 'gpt-test',
+  );
+});
+
+test('本文の model_not_found もモデル欠落として投げる', async () => {
+  const { impl } = sseFetch([], {
+    status: 400,
+    body: '{"error":{"code":"model_not_found"}}',
+  });
+  await assert.rejects(
+    translateWithOpenAi({
+      source: 'x',
+      headingContext: '',
+      config,
+      signal: new AbortController().signal,
+      fetchImpl: impl,
+    }),
+    (error: unknown) => error instanceof ModelMissingError,
+  );
+});
+
+test('429 は流量制限として投げる', async () => {
+  const { impl } = sseFetch([], { status: 429 });
+  await assert.rejects(
+    translateWithOpenAi({
+      source: 'x',
+      headingContext: '',
+      config,
+      signal: new AbortController().signal,
+      fetchImpl: impl,
+    }),
+    (error: unknown) => error instanceof ProviderRateLimitError,
+  );
+});
+
+test('500 は可用性の問題として投げる', async () => {
+  const { impl } = sseFetch([], { status: 500 });
+  await assert.rejects(
+    translateWithOpenAi({
+      source: 'x',
+      headingContext: '',
+      config,
+      signal: new AbortController().signal,
+      fetchImpl: impl,
+    }),
+    (error: unknown) => error instanceof ProviderUnavailableError,
+  );
+});
+
+test('接続できないときは可用性の問題として投げる', async () => {
+  const impl = (async () => {
+    throw new TypeError('fetch failed');
+  }) as unknown as typeof globalThis.fetch;
+  await assert.rejects(
+    translateWithOpenAi({
+      source: 'x',
+      headingContext: '',
+      config,
+      signal: new AbortController().signal,
+      fetchImpl: impl,
+    }),
+    (error: unknown) =>
+      error instanceof ProviderUnavailableError && error.message.includes('api.openai.com'),
+  );
+});
+
+test('呼び出し側の中断はそのまま伝える', async () => {
+  const controller = new AbortController();
+  const impl = (async (_url: string, options: RequestInit = {}) => {
+    controller.abort();
+    (options.signal as AbortSignal).throwIfAborted();
+    return new Response('', { status: 200 });
+  }) as unknown as typeof globalThis.fetch;
+  await assert.rejects(
+    translateWithOpenAi({
+      source: 'x',
+      headingContext: '',
+      config,
+      signal: controller.signal,
+      fetchImpl: impl,
+    }),
+    (error: unknown) => (error as Error).name === 'AbortError',
+  );
 });
