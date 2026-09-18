@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   DEFAULT_IMAGE,
@@ -8,6 +11,7 @@ import {
   assertLoopback,
   createExtractor,
   readSettings,
+  startServer,
 } from '../../web/server/main';
 
 function env(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
@@ -176,4 +180,62 @@ test('鍵は設定に持たせない（環境変数からも読まない）', ()
     'C:/tmp/dist-web',
   );
   assert.equal(JSON.stringify(settings).includes('sk-leak'), false);
+});
+
+// ---- 起動 -----------------------------------------------------------------
+
+/** 起動に要る最小限の配信物を置いた一時ディレクトリ。 */
+async function scratch() {
+  const dir = await mkdtemp(join(tmpdir(), 'pdf-ja-main-'));
+  const staticRoot = join(dir, 'static');
+  await mkdir(staticRoot, { recursive: true });
+  await writeFile(
+    join(staticRoot, 'index.html'),
+    '<!doctype html><html><head><!--PDF_JA_TOKEN--><!--PDF_JA_MODEL--></head><body>ok</body></html>',
+    'utf8',
+  );
+  return { dir, staticRoot, cleanup: () => rm(dir, { recursive: true, force: true }) };
+}
+
+// Mutation: 起動時に鍵を必須にすると失敗する。
+test('鍵が未登録でもクラウド設定でサーバーは起動し、画面を配信する', async () => {
+  const { dir, staticRoot, cleanup } = await scratch();
+  const settings = readSettings(
+    env({
+      PDF_JA_PROVIDER: 'openai',
+      PDF_JA_CLOUD_ALLOWED: '1',
+      PDF_JA_MODEL: 'gpt-test',
+      PDF_JA_PORT: '0',
+      PDF_JA_DATA_DIR: dir,
+      PDF_JA_STATIC_ROOT: staticRoot,
+    }),
+    staticRoot,
+  );
+  const running = await startServer(settings);
+  try {
+    assert.match(running.url, /^http:\/\/127\.0\.0\.1:\d+\/$/);
+  } finally {
+    await running.close();
+    await cleanup();
+  }
+});
+
+// Mutation: 許可の無いクラウド設定を素通しすると失敗する。
+test('クラウドの許可が無ければ鍵の有無にかかわらず起動しない', async () => {
+  const { dir, staticRoot, cleanup } = await scratch();
+  const settings = readSettings(
+    env({
+      PDF_JA_PROVIDER: 'openai',
+      PDF_JA_MODEL: 'gpt-test',
+      PDF_JA_PORT: '0',
+      PDF_JA_DATA_DIR: dir,
+      PDF_JA_STATIC_ROOT: staticRoot,
+    }),
+    staticRoot,
+  );
+  try {
+    await assert.rejects(startServer(settings), /許可/);
+  } finally {
+    await cleanup();
+  }
 });

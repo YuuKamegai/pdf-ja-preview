@@ -36,6 +36,22 @@ body {
   border-right: 1px solid var(--line);
 }
 
+/* 鍵欄はクラウドのときだけ出す。hidden を効かせるため display を上書きしない。 */
+.toolbar .group[hidden] {
+  display: none;
+}
+
+.toolbar .api-key input {
+  width: 14rem;
+  /* 伏せ字でも「何か入っている」ことは分かるようにする。 */
+  font-family: monospace;
+}
+
+.toolbar .api-key button[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .toolbar .status {
   margin-left: auto;
   display: inline-flex;

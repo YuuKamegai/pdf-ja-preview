@@ -103,17 +103,19 @@ export function judgePreflight(facts: PreflightFacts, context: PreflightContext)
         title: `原文を ${context.target} へ送る許可がありません。`,
         remedy: 'PDF_JA_CLOUD_ALLOWED=1 を設定してください。原文が外部へ送られます。',
       });
-    } else if (!cloud.hasKey) {
-      fatal.push({
-        level: 'fatal',
-        title: 'API キーが登録されていません。',
-        remedy: 'node dist-web/server.cjs --set-key で登録してください。',
-      });
     } else if (cloud.model.trim() === '') {
       fatal.push({
         level: 'fatal',
         title: 'クラウドで使うモデル名が未設定です。',
         remedy: 'PDF_JA_MODEL にモデル名を設定してください。既定値はありません。',
+      });
+    } else if (!cloud.hasKey) {
+      // 鍵は画面から登録できる。ここで止めると、その画面へ辿り着けない。
+      warnings.push({
+        level: 'warning',
+        title: 'API キーが登録されていません（訳は出ません）',
+        remedy:
+          '画面の「APIキー」欄から登録してください。node dist-web/server.cjs --set-key でも登録できます。',
       });
     } else if (!cloud.reachable) {
       warnings.push({

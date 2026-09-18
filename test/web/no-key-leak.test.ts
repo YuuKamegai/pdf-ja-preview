@@ -1,11 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { describeTarget } from '../../src/translate/provider';
 import { formatProblems, judgePreflight, preflight } from '../../web/server/preflight';
-import { readSettings } from '../../web/server/main';
+import { readSettings, startServer } from '../../web/server/main';
+import { SettingsStore } from '../../web/server/settings-store';
 
 const KEY = 'sk-canary-0123456789abcdef';
+const windows = process.platform === 'win32';
 
 test('設定の丸ごとに鍵が現れない', () => {
   const settings = readSettings(
@@ -92,4 +97,70 @@ test('preflight の実経路と整形ログに apiKey を問題文へ混ぜる m
   const logLines = formatProblems(problems);
   assert.equal(logLines.length, 2);
   assert.equal(logLines.join('\n').includes(KEY), false);
+});
+
+// ---- 実際の保存と HTTP 応答 ------------------------------------------------
+
+/**
+ * ここだけは DPAPI と実 HTTP を通す。
+ * 「暗号化して保存した鍵が、画面と API のどこにも出てこない」は組み立て全体の
+ * 性質なので、部品ごとの試験では守れない。
+ */
+test('実 SettingsStore に登録した鍵は HTTP 応答のどこにも出ない', { skip: !windows }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pdf-ja-leak-'));
+  const staticRoot = join(dir, 'static');
+  await mkdir(staticRoot, { recursive: true });
+  await writeFile(
+    join(staticRoot, 'index.html'),
+    '<!doctype html><html><head><!--PDF_JA_TOKEN--><!--PDF_JA_MODEL--></head><body>ok</body></html>',
+    'utf8',
+  );
+
+  await new SettingsStore(dir).setApiKey(KEY);
+
+  const settings = readSettings(
+    {
+      LOCALAPPDATA: dir,
+      PDF_JA_PROVIDER: 'openai',
+      PDF_JA_CLOUD_ALLOWED: '1',
+      PDF_JA_MODEL: 'gpt-test',
+      PDF_JA_PORT: '0',
+      PDF_JA_DATA_DIR: dir,
+      PDF_JA_STATIC_ROOT: staticRoot,
+    } as NodeJS.ProcessEnv,
+    staticRoot,
+  );
+
+  const running = await startServer(settings);
+  try {
+    const page = await (await fetch(running.url)).text();
+    assert.equal(page.includes(KEY), false, '起動 HTML に鍵を埋め込まない');
+
+    const token = /name="pdf-ja-token" content="([^"]+)"/.exec(page)?.[1];
+    assert.ok(token, 'token を取り出せる');
+
+    const status = await fetch(`${running.url}api/settings/api-key`, {
+      headers: { 'x-pdf-ja-token': token },
+    });
+    const body = await status.text();
+    assert.equal(status.status, 200);
+    assert.equal(body.includes(KEY), false, '状態応答は登録の有無だけを返す');
+    assert.deepEqual(JSON.parse(body), {
+      configured: true,
+      cloud: true,
+      target: 'api.openai.com',
+    });
+
+    // 知らない文書のエラー経路にも鍵は混ざらない。
+    const missing = await fetch(`${running.url}api/documents/unknown`, {
+      headers: { 'x-pdf-ja-token': token },
+    });
+    assert.equal((await missing.text()).includes(KEY), false);
+
+    const raw = await readFile(join(dir, 'settings.json'), 'utf8');
+    assert.equal(raw.includes(KEY), false, 'ディスク上も平文ではない');
+  } finally {
+    await running.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });

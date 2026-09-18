@@ -156,13 +156,27 @@ test('クラウドで許可が無ければ致命', () => {
   assert.match(problems[0]?.remedy ?? '', /PDF_JA_CLOUD_ALLOWED/);
 });
 
-test('クラウドで鍵が無ければ致命', () => {
+// 鍵は画面から登録できる。起動を止めると、その画面へ辿り着けない。
+test('クラウドで鍵が無いのは警告に留め、画面での登録を案内する', () => {
   const problems = judgePreflight(
     cloudFacts({ cloud: { allowed: true, hasKey: false, model: 'gpt-test', reachable: true } }),
     cloudContext(),
   );
-  assert.equal(problems[0]?.level, 'fatal');
+  assert.equal(problems.length, 1);
+  assert.equal(problems[0]?.level, 'warning');
+  assert.match(problems[0]?.title ?? '', /API キー/);
+  assert.match(problems[0]?.remedy ?? '', /画面/);
   assert.match(problems[0]?.remedy ?? '', /--set-key/);
+});
+
+// 鍵が無くても、直しようのないモデル未設定は先に致命として出す。
+test('鍵もモデル名も無ければモデル名の方を致命として出す', () => {
+  const problems = judgePreflight(
+    cloudFacts({ cloud: { allowed: true, hasKey: false, model: '', reachable: false } }),
+    cloudContext(),
+  );
+  assert.equal(problems[0]?.level, 'fatal');
+  assert.match(problems[0]?.remedy ?? '', /PDF_JA_MODEL/);
 });
 
 test('クラウドでモデル名が無ければ致命', () => {
@@ -477,21 +491,26 @@ test('クラウドモードでは Ollama を探査しない', async () => {
   assert.equal(ollamaCalls, 0);
 });
 
+// 3 つのどれが欠けても外へは 1 バイトも出さない。鍵だけは画面から直せるので
+// 起動は止めない（level が違うだけで、探査しないことは同じ）。
 for (const missing of [
   {
     name: '許可',
     settings: { cloudAllowed: false, apiKey: 'sk-test', model: 'gpt-test' },
     remedy: /PDF_JA_CLOUD_ALLOWED/,
+    level: 'fatal',
   },
   {
     name: '鍵',
     settings: { cloudAllowed: true, apiKey: '', model: 'gpt-test' },
     remedy: /--set-key/,
+    level: 'warning',
   },
   {
     name: 'モデル名',
     settings: { cloudAllowed: true, apiKey: 'sk-test', model: '   ' },
     remedy: /PDF_JA_MODEL/,
+    level: 'fatal',
   },
 ] as const) {
   test(`クラウドの${missing.name}が無ければ通信しない`, async () => {
@@ -520,7 +539,7 @@ for (const missing of [
         },
       },
     );
-    assert.equal(problems[0]?.level, 'fatal');
+    assert.equal(problems[0]?.level, missing.level);
     assert.match(problems[0]?.remedy ?? '', missing.remedy);
     assert.equal(cloudCalls, 0);
     assert.equal(ollamaCalls, 0);

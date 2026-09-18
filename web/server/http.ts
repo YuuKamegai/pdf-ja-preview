@@ -37,12 +37,32 @@ export const HEARTBEAT_MS = 15_000;
 /** この時間つながらないままならセッションを捨てる。 */
 export const SESSION_GRACE_MS = 5 * 60_000;
 
+/**
+ * 画面から API キーを登録・削除する口。ローカル provider では渡さない。
+ *
+ * 鍵そのものは決して外へ返さない。登録されているかどうかだけを答える。
+ */
+export interface CloudKeyControl {
+  /** 送信先のホスト名。表示にだけ使う。鍵もパスもクエリも含めない。 */
+  target: string;
+  /** 登録されているか。値は返さない。 */
+  configured(): Promise<boolean>;
+  set(value: string): Promise<void>;
+  clear(): Promise<void>;
+}
+
 export interface AppDeps {
   documents: DocumentStore;
   storage: Storage;
   scheduler: Scheduler;
-  /** model はセッションごとの値で差し替える。 */
-  connection: ProviderConnection;
+  /**
+   * セッションを作るたびに呼ぶ。鍵は画面から登録・削除できるので、起動時の値を
+   * 使い回さず、そのつど最新の設定から組み直す。model はセッションごとの値で
+   * 差し替える。
+   */
+  resolveConnection(): Promise<ProviderConnection>;
+  /** クラウドの鍵を画面から扱う口。ローカルなら undefined。 */
+  cloudKey?: CloudKeyControl;
   defaultModel: string;
   /** 静的ファイルの置き場所。ここから外へは出さない。 */
   staticRoot: string;
@@ -220,6 +240,18 @@ export function createApp(deps: AppDeps): AppServer {
       }
     }
 
+    if (parts[0] === 'settings' && parts[1] === 'api-key' && parts.length === 2) {
+      if (method === 'GET') {
+        request.resume();
+        return getApiKey(response);
+      }
+      if (method === 'PUT') return putApiKey(request, response);
+      if (method === 'DELETE') {
+        request.resume();
+        return deleteApiKey(response);
+      }
+    }
+
     if (parts[0] === 'sessions') {
       if (parts.length === 1 && method === 'POST') return postSession(request, response);
       const id = parts[1];
@@ -357,6 +389,79 @@ export function createApp(deps: AppDeps): AppServer {
     createReadStream(path, { start, end }).pipe(response);
   }
 
+  // ---- API キー -----------------------------------------------------------
+
+  /**
+   * 受け取った鍵を確かめる。
+   *
+   * ヘッダーに載せる値なので、制御文字（改行を含む）が混ざったものは受け取らない。
+   * 拒否の理由は書くが、受け取った値そのものは決して返さない。
+   */
+  function cleanApiKey(body: unknown): string {
+    const value = (body as { apiKey?: unknown } | null)?.apiKey;
+    if (typeof value !== 'string') {
+      throw new ProtocolContractError('invalid-api-key', 'apiKey を文字列で送ってください');
+    }
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      throw new ProtocolContractError('invalid-api-key', 'API キーが空です');
+    }
+    if (/[\u0000-\u001f\u007f]/.test(trimmed)) {
+      throw new ProtocolContractError(
+        'invalid-api-key',
+        'API キーに改行や制御文字は使えません',
+      );
+    }
+    return trimmed;
+  }
+
+  /** 登録の有無だけを返す。鍵は載せない。 */
+  async function apiKeyStatus(): Promise<{
+    configured: boolean;
+    cloud: boolean;
+    target: string;
+  }> {
+    const control = deps.cloudKey;
+    if (!control) return { configured: false, cloud: false, target: '' };
+    return { configured: await control.configured(), cloud: true, target: control.target };
+  }
+
+  async function getApiKey(response: http.ServerResponse): Promise<void> {
+    sendJson(response, 200, await apiKeyStatus());
+  }
+
+  async function putApiKey(
+    request: http.IncomingMessage,
+    response: http.ServerResponse,
+  ): Promise<void> {
+    const body = await readJsonBody(request);
+    const control = deps.cloudKey;
+    if (!control) {
+      return sendError(
+        response,
+        409,
+        'local-provider',
+        '手元の Ollama を使っています。API キーは要りません。',
+      );
+    }
+    await control.set(cleanApiKey(body));
+    sendJson(response, 200, await apiKeyStatus());
+  }
+
+  async function deleteApiKey(response: http.ServerResponse): Promise<void> {
+    const control = deps.cloudKey;
+    if (!control) {
+      return sendError(
+        response,
+        409,
+        'local-provider',
+        '手元の Ollama を使っています。API キーは要りません。',
+      );
+    }
+    await control.clear();
+    sendJson(response, 200, await apiKeyStatus());
+  }
+
   // ---- セッション ---------------------------------------------------------
 
   async function postSession(
@@ -371,6 +476,24 @@ export function createApp(deps: AppDeps): AppServer {
     }
     const hash = deps.documents.hashOf(body.documentId);
     if (hash === undefined) return sendError(response, 404, 'unknown-document', '文書がありません');
+
+    // 鍵は画面から登録・削除できる。起動時の値ではなく、今の設定で組み直す。
+    // 文書を掴む前に確かめる。断るときに掴んだままにしない。
+    let connection: ProviderConnection;
+    try {
+      connection = await deps.resolveConnection();
+    } catch (error) {
+      return sendError(response, 409, 'not-sendable', (error as Error).message);
+    }
+    if (connection.kind !== 'ollama' && connection.apiKey.trim() === '') {
+      return sendError(
+        response,
+        409,
+        'no-api-key',
+        'API キーが登録されていません。画面の「APIキー」から登録してください。',
+      );
+    }
+
     if (!deps.documents.retain(body.documentId)) {
       return sendError(response, 409, 'unknown-document', '文書は閉じられています');
     }
@@ -383,7 +506,7 @@ export function createApp(deps: AppDeps): AppServer {
       model: body.model,
       storage: deps.storage,
       scheduler: deps.scheduler,
-      connection: deps.connection,
+      connection,
       translate: deps.translate,
     });
     const entry: SessionEntry = {

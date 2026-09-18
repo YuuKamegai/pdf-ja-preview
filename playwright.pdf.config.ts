@@ -1,6 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = Number(process.env.PDF_JA_E2E_PORT ?? 7398);
+/**
+ * 鍵の登録は「クラウド構成のサーバー」でしか起きない。既定のローカル構成と
+ * 同居できないので、隣のポートにもう 1 台だけ立てる。翻訳は両方とも固定なので、
+ * どちらからも外へは出ない。
+ */
+const CLOUD_PORT = PORT + 1;
 
 /**
  * PDF 日本語プレビューのブラウザ試験。
@@ -31,13 +37,24 @@ export default defineConfig({
       use: { ...devices['Desktop Edge'], channel: process.env.PDF_JA_E2E_CHANNEL ?? 'msedge' },
     },
   ],
-  webServer: {
-    // 先に `npm run build:web` が要る。dist-web をそのまま配信する。
-    command: `node --import tsx test/web-e2e/fixture-server.ts ${PORT}`,
-    url: `http://127.0.0.1:${PORT}/`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  },
+  webServer: [
+    {
+      // 先に `npm run build:web` が要る。dist-web をそのまま配信する。
+      command: `node --import tsx test/web-e2e/fixture-server.ts ${PORT}`,
+      url: `http://127.0.0.1:${PORT}/`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
+      command: `node --import tsx test/web-e2e/fixture-server.ts ${CLOUD_PORT}`,
+      env: { PDF_JA_E2E_CLOUD: '1' },
+      url: `http://127.0.0.1:${CLOUD_PORT}/`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  ],
 });

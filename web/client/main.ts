@@ -10,7 +10,13 @@ import type { Snapshot } from '../shared/protocol';
 import { Api, ApiError, readToken } from './api';
 import { candidatesAt, regionsForPage } from './geometry';
 import { PdfView } from './pdf-view';
-import { applySessionResponse, countStates, reduceEvent } from './state';
+import {
+  applySessionResponse,
+  countStates,
+  describeApiKey,
+  reduceEvent,
+  type ApiKeyStatus,
+} from './state';
 import { TranslationView } from './translation-view';
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
@@ -26,6 +32,11 @@ interface Elements {
   zoomOut: HTMLButtonElement;
   rotate: HTMLButtonElement;
   pause: HTMLButtonElement;
+  apiKeyGroup: HTMLElement;
+  apiKey: HTMLInputElement;
+  saveApiKey: HTMLButtonElement;
+  clearApiKey: HTMLButtonElement;
+  apiKeyStatus: HTMLElement;
   clearCache: HTMLButtonElement;
   close: HTMLButtonElement;
   extraction: HTMLElement;
@@ -93,6 +104,14 @@ export class App {
     e.pause.addEventListener('click', () => void this.togglePause());
     e.clearCache.addEventListener('click', () => void this.clearCache());
     e.close.addEventListener('click', () => void this.closeDocument());
+    e.saveApiKey.addEventListener('click', () => void this.saveApiKey());
+    e.clearApiKey.addEventListener('click', () => void this.clearApiKey());
+    // 貼り付けてそのまま Enter を押す人が多い。取りこぼさない。
+    e.apiKey.addEventListener('keydown', (event) => {
+      if ((event as KeyboardEvent).key !== 'Enter') return;
+      event.preventDefault();
+      void this.saveApiKey();
+    });
     e.model.addEventListener('change', () => void this.changeModel(e.model.value.trim()));
 
     this.#elements.pdf.addEventListener('click', (event) => this.#onPdfClick(event as MouseEvent));
@@ -359,6 +378,64 @@ export class App {
     }
   }
 
+  // ---- API キー -----------------------------------------------------------
+
+  /**
+   * 鍵の状態を聞き直して欄へ反映する。
+   *
+   * 受け取るのは「登録されているか」だけ。鍵そのものは決して画面へ戻らない。
+   */
+  async refreshApiKey(): Promise<void> {
+    try {
+      this.#showApiKey(await this.#api.getApiKeyStatus());
+    } catch {
+      // 状態が読めなくても閲覧はできる。欄は出さない。
+      this.#showApiKey({ configured: false, cloud: false, target: '' });
+    }
+  }
+
+  async saveApiKey(): Promise<void> {
+    const value = this.#elements.apiKey.value.trim();
+    if (value === '') {
+      this.#banner('API キーを入力してください。');
+      return;
+    }
+    try {
+      const status = await this.#api.setApiKey(value);
+      // 入力欄に残さない。画面に出したままにしない。
+      this.#elements.apiKey.value = '';
+      this.#showApiKey(status);
+      this.#banner('API キーを暗号化して保存しました。');
+      // 鍵待ちで始められなかった文書があれば、ここから訳し始める。
+      await this.#resumeAfterKey();
+    } catch (error) {
+      this.#banner(this.#describe(error));
+    }
+  }
+
+  async clearApiKey(): Promise<void> {
+    try {
+      this.#showApiKey(await this.#api.clearApiKey());
+      this.#elements.apiKey.value = '';
+      this.#banner('API キーを削除しました。');
+    } catch (error) {
+      this.#banner(this.#describe(error));
+    }
+  }
+
+  /** 鍵が無くてセッションを作れなかった文書を、登録後に訳し始める。 */
+  async #resumeAfterKey(): Promise<void> {
+    if (this.#snapshot || !this.#documentId || !this.#document) return;
+    await this.#startSession(this.#openGeneration);
+  }
+
+  #showApiKey(status: ApiKeyStatus): void {
+    const view = describeApiKey(status);
+    this.#elements.apiKeyGroup.hidden = !view.visible;
+    this.#elements.apiKeyStatus.textContent = view.label;
+    this.#elements.clearApiKey.disabled = !view.canClear;
+  }
+
   // ---- 位置対応 -----------------------------------------------------------
 
   #onPdfClick(event: MouseEvent): void {
@@ -470,6 +547,11 @@ export function boot(): App {
     zoomOut: must('zoom-out'),
     rotate: must('rotate'),
     pause: must('pause'),
+    apiKeyGroup: must('api-key-group'),
+    apiKey: must('api-key'),
+    saveApiKey: must('save-api-key'),
+    clearApiKey: must('clear-api-key'),
+    apiKeyStatus: must('api-key-status'),
     clearCache: must('clear-cache'),
     close: must('close'),
     extraction: must('extraction-status'),
@@ -480,7 +562,9 @@ export function boot(): App {
   };
   const defaultModel = document.querySelector('meta[name="pdf-ja-model"]')?.getAttribute('content');
   if (defaultModel) elements.model.value = decodeURIComponent(defaultModel);
-  return new App(new Api(readToken()), elements);
+  const app = new App(new Api(readToken()), elements);
+  void app.refreshApiKey();
+  return app;
 }
 
 if (document.readyState === 'loading') {

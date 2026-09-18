@@ -13,10 +13,10 @@ import { fileURLToPath } from 'node:url';
 
 import { DocumentStore } from '../../web/server/documents';
 import type { Extractor } from '../../web/server/extractor';
-import { createApp } from '../../web/server/http';
+import { createApp, type CloudKeyControl } from '../../web/server/http';
 import { Scheduler } from '../../web/server/scheduler';
 import { allowedHostsFor, createToken } from '../../web/server/security';
-import type { TranslateFn } from '../../web/server/session';
+import type { ProviderConnection, TranslateFn } from '../../web/server/session';
 import { Storage } from '../../web/server/storage';
 import { parseDocument, type PdfDocument } from '../../web/shared/document';
 
@@ -62,6 +62,48 @@ const fixedTranslate: TranslateFn = async (block) => {
   return `訳: ${block.source}`;
 };
 
+/**
+ * `PDF_JA_E2E_CLOUD=1` ならクラウド構成として振る舞う。
+ *
+ * 鍵は覚えておくだけで、翻訳は `fixedTranslate` が返す。外へは 1 バイトも出ない。
+ * 画面から鍵を登録して訳し始められることを、実 HTTP と実画面で確かめるための口。
+ */
+const cloud = process.env.PDF_JA_E2E_CLOUD === '1';
+
+const LOCAL: ProviderConnection = {
+  kind: 'ollama',
+  endpoint: 'http://127.0.0.1:11434',
+  think: false,
+  temperature: 0.2,
+  timeoutMs: 5000,
+};
+
+let storedKey = '';
+
+const cloudKey: CloudKeyControl = {
+  target: 'api.openai.com',
+  configured: () => Promise.resolve(storedKey !== ''),
+  set: (value) => {
+    storedKey = value;
+    return Promise.resolve();
+  },
+  clear: () => {
+    storedKey = '';
+    return Promise.resolve();
+  },
+};
+
+function resolveConnection(): Promise<ProviderConnection> {
+  if (!cloud) return Promise.resolve(LOCAL);
+  return Promise.resolve({
+    kind: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: storedKey,
+    temperature: 0.2,
+    timeoutMs: 5000,
+  });
+}
+
 async function main(): Promise<void> {
   const port = Number(process.argv[2] ?? '7398');
   const { mkdtemp } = await import('node:fs/promises');
@@ -78,7 +120,8 @@ async function main(): Promise<void> {
     documents,
     storage,
     scheduler,
-    connection: { kind: 'ollama', endpoint: 'http://127.0.0.1:11434', think: false, temperature: 0.2, timeoutMs: 5000 },
+    resolveConnection,
+    cloudKey: cloud ? cloudKey : undefined,
     defaultModel: 'fixture-model',
     staticRoot: join(root, 'dist-web'),
     security: { token: createToken(), allowedHosts },
@@ -88,7 +131,7 @@ async function main(): Promise<void> {
 
   await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
   for (const host of allowedHostsFor(port)) allowedHosts.add(host);
-  console.log(`fixture server on http://127.0.0.1:${port}/`);
+  console.log(`fixture server on http://127.0.0.1:${port}/${cloud ? ' (cloud)' : ''}`);
 
   const stop = (): void => {
     server.close(() => {

@@ -7,6 +7,7 @@
  */
 
 import { parseDocument, type PdfDocument } from '../shared/document';
+import type { ApiKeyStatus } from './state';
 import type {
   DocumentAccepted,
   DocumentStatus,
@@ -68,6 +69,29 @@ export class Api {
       throw new ApiError(response.status, code, message);
     }
     return response;
+  }
+
+  // ---- API キー -----------------------------------------------------------
+
+  /** 登録されているかどうかだけを聞く。鍵は返ってこない。 */
+  async getApiKeyStatus(): Promise<ApiKeyStatus> {
+    const response = await this.#call('/api/settings/api-key');
+    return (await response.json()) as ApiKeyStatus;
+  }
+
+  /** 鍵を預ける。戻り値は登録の有無だけで、鍵は含まない。 */
+  async setApiKey(apiKey: string): Promise<ApiKeyStatus> {
+    const response = await this.#call('/api/settings/api-key', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiKey }),
+    });
+    return (await response.json()) as ApiKeyStatus;
+  }
+
+  async clearApiKey(): Promise<ApiKeyStatus> {
+    const response = await this.#call('/api/settings/api-key', { method: 'DELETE' });
+    return (await response.json()) as ApiKeyStatus;
   }
 
   async uploadDocument(bytes: BlobPart, signal?: AbortSignal): Promise<DocumentAccepted> {
@@ -192,4 +216,4 @@ export class Api {
   }
 }
 
-export type { PdfDocument, Snapshot, ServerEvent };
+export type { ApiKeyStatus, PdfDocument, Snapshot, ServerEvent };

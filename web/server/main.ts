@@ -23,10 +23,11 @@ import {
   pythonExtractor,
   type Extractor,
 } from './extractor';
-import { createApp } from './http';
+import { createApp, type CloudKeyControl } from './http';
 import { formatProblems, preflight } from './preflight';
 import { Scheduler } from './scheduler';
 import { allowedHostsFor, createToken } from './security';
+import type { ProviderConnection } from './session';
 import { SettingsStore } from './settings-store';
 import { Storage, defaultDataDir } from './storage';
 
@@ -148,13 +149,55 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
+/**
+ * 起動時は「鍵以外」の前提だけを確かめる。
+ *
+ * 鍵は画面から登録できる。鍵が無いだけで起動を止めると、その画面へ辿り着けない。
+ * 鍵そのものはセッションを作るたびに `resolveConnection()` が確かめる。
+ */
+const KEY_CHECKED_PER_SESSION = 'checked-per-session';
+
 export async function startServer(settings: ServerSettings): Promise<RunningServer> {
-  let provider = settings.provider;
+  const provider = settings.provider;
   if (provider.kind !== 'ollama') {
-    const apiKey = await new SettingsStore(settings.dataDir).readApiKey();
-    provider = { ...provider, apiKey };
+    assertSendable({ ...provider, apiKey: KEY_CHECKED_PER_SESSION }, settings.cloudAllowed);
+  } else {
+    assertSendable(provider, settings.cloudAllowed);
   }
-  assertSendable(provider, settings.cloudAllowed);
+
+  const store = new SettingsStore(settings.dataDir);
+
+  /** セッションを作るたびに、そのときの鍵で接続を組み直す。 */
+  const resolveConnection = async (): Promise<ProviderConnection> => {
+    if (provider.kind === 'ollama') return provider;
+    let apiKey = '';
+    try {
+      apiKey = await store.readApiKey();
+    } catch {
+      // 読めない鍵は未登録として扱う。内容は例外にもログにも出さない。
+    }
+    const resolved = { ...provider, apiKey };
+    // 鍵以外はここでも確かめる。鍵の有無は呼び出し側が案内する。
+    assertSendable(
+      apiKey === '' ? { ...resolved, apiKey: KEY_CHECKED_PER_SESSION } : resolved,
+      settings.cloudAllowed,
+    );
+    return resolved;
+  };
+
+  /** クラウドのときだけ、画面から鍵を扱えるようにする。 */
+  const cloudKey: CloudKeyControl | undefined =
+    provider.kind === 'ollama'
+      ? undefined
+      : {
+          target: describeTarget(provider),
+          configured: async () => {
+            const stored = (await store.load()).apiKey;
+            return typeof stored === 'string' && stored !== '';
+          },
+          set: (value) => store.setApiKey(value),
+          clear: () => store.clearApiKey(),
+        };
 
   const storage = new Storage(settings.dataDir);
   await storage.initialize();
@@ -172,7 +215,8 @@ export async function startServer(settings: ServerSettings): Promise<RunningServ
     documents,
     storage,
     scheduler,
-    connection: provider,
+    resolveConnection,
+    cloudKey,
     defaultModel: settings.model,
     staticRoot: settings.staticRoot,
     security: { token, allowedHosts },

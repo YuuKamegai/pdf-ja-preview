@@ -34,6 +34,21 @@
         <button id="pause" type="button">一時停止</button>
       </span>
 
+      <span class="group api-key" id="api-key-group" data-testid="api-key-group" hidden>
+        <label for="api-key" class="muted">APIキー</label>
+        <input
+          id="api-key"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="貼り付けて登録"
+          aria-label="APIキー"
+        />
+        <button id="save-api-key" type="button">登録</button>
+        <button id="clear-api-key" type="button">削除</button>
+        <span id="api-key-status" class="muted" data-testid="api-key-status"></span>
+      </span>
+
       <span class="group">
         <button id="clear-cache" type="button">保存した訳を消す</button>
         <button id="close" type="button">閉じる</button>

@@ -93,3 +93,30 @@ export function countStates(state: Snapshot, document: PdfDocument): Counts {
   }
   return { total: wanted.size, translated, failed, pending };
 }
+
+// ---- API キーの欄 ---------------------------------------------------------
+
+/** サーバーが返す鍵の状態。鍵そのものは入らない。 */
+export interface ApiKeyStatus {
+  configured: boolean;
+  cloud: boolean;
+  target: string;
+}
+
+export interface ApiKeyView {
+  /** 鍵欄を出すか。ローカルの Ollama では出さない。 */
+  visible: boolean;
+  label: string;
+  /** 削除できるか。未登録なら押せない。 */
+  canClear: boolean;
+}
+
+/** 鍵の欄に出す文言。鍵そのものは受け取らないので、決して表示できない。 */
+export function describeApiKey(status: ApiKeyStatus): ApiKeyView {
+  if (!status.cloud) return { visible: false, label: '', canClear: false };
+  return {
+    visible: true,
+    label: status.configured ? `登録済み（${status.target}）` : `未登録（${status.target}）`,
+    canClear: status.configured,
+  };
+}

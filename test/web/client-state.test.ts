@@ -14,6 +14,7 @@ import {
   applySessionResponse,
   blockState,
   countStates,
+  describeApiKey,
   reduceEvent,
 } from '../../web/client/state';
 import type { PdfBlock, PdfDocument } from '../../web/shared/document';
@@ -317,4 +318,27 @@ test('応答で休止とモデルは更新する', () => {
 test('応答にエラーが無ければ手元のエラーも消す', () => {
   const current = snapshot({ error: { code: 'x', message: 'y' } });
   assert.equal(applySessionResponse(current, snapshot()).error, undefined);
+});
+
+// ---- API キーの欄 ---------------------------------------------------------
+
+// Mutation: ローカルでも鍵欄を出すと失敗する。
+test('ローカルの Ollama では鍵欄を出さない', () => {
+  const shown = describeApiKey({ configured: false, cloud: false, target: '' });
+  assert.equal(shown.visible, false);
+  assert.equal(shown.canClear, false);
+  assert.equal(shown.label, '');
+});
+
+test('クラウドでは登録の有無と送信先を出す', () => {
+  const missing = describeApiKey({ configured: false, cloud: true, target: 'api.openai.com' });
+  assert.equal(missing.visible, true);
+  assert.equal(missing.canClear, false);
+  assert.match(missing.label, /未登録/);
+  assert.match(missing.label, /api\.openai\.com/);
+
+  const present = describeApiKey({ configured: true, cloud: true, target: 'api.openai.com' });
+  assert.equal(present.visible, true);
+  assert.equal(present.canClear, true);
+  assert.match(present.label, /登録済み/);
 });
