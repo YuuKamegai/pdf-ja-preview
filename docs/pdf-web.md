@@ -112,67 +112,89 @@ npm run start:web
 node dist-web/server.cjs --open
 ```
 
-### クラウドの LLM を使う
+### 接続を登録して切り替える
 
-クラウド利用は opt-in です。API キー、明示的な送信許可、クラウド用のモデル名がすべて
-揃うまで原文を送信しません。**クラウドの既定モデル名はありません。** 使用するモデルを
-`PDF_JA_MODEL` へ明示してください。
+送信先は**画面で選びます**。ローカルの Ollama と外部 API を同じ一覧に並べ、行き来
+できます。クラウド利用は opt-in で、接続ごとに明示的な許可が要ります。
 
-起動前に、同じ端末で次を設定します。
+画面上部の **「接続」** で選ぶことが切り替えです。隣の **「接続を管理」** で追加・
+編集・削除・接続テスト・API キーの登録を行います。
 
-```powershell
-# OpenAI 互換 endpoint（Bearer 認証）
-$env:PDF_JA_PROVIDER = 'openai'
-$env:PDF_JA_BASE_URL = 'https://api.openai.com/v1'
-$env:PDF_JA_CLOUD_ALLOWED = '1'
-$env:PDF_JA_MODEL = '<利用するモデル名>'
-node dist-web/server.cjs
-```
+1 つの接続が、次をまとめて持ちます。
 
-```powershell
-# Azure OpenAI v1（api-key 認証）
-$env:PDF_JA_PROVIDER = 'azure'
-$env:PDF_JA_BASE_URL = 'https://<resource>.openai.azure.com/openai/v1'
-$env:PDF_JA_CLOUD_ALLOWED = '1'
-$env:PDF_JA_MODEL = '<deployment 名>'
-node dist-web/server.cjs
-```
+| 項目 | 意味 |
+|---|---|
+| 名前 | 一覧に出る識別子。1〜40 文字 |
+| 種類 | ローカル Ollama / OpenAI 互換 / Azure OpenAI |
+| 送信先 | Ollama はループバックの URL、クラウドは endpoint |
+| モデル | Ollama と OpenAI 互換はモデル名、Azure は **deployment 名** |
+| APIキー | クラウドのときだけ。DPAPI で暗号化して保存 |
 
-`azure` のときは次の 3 点が `openai` と違います。
+種類ごとの決まりは次のとおりです。
 
-- 送信先は `https://<resource>.openai.azure.com/openai/v1` または
+- **ローカル Ollama** — 送信先はループバック（`127.0.0.1` / `localhost` / `::1`）
+  だけです。API キーも送信許可も要りません。
+- **OpenAI 互換** — 送信先は `https` だけです。手元の互換サーバーに限り
+  `http://127.0.0.1:...` を許します。認証は `Authorization: Bearer`。
+- **Azure OpenAI** — 送信先は `https://<resource>.openai.azure.com/openai/v1` または
   `https://<resource>.services.ai.azure.com/openai/v1` だけです。ほかのホスト、
-  `http`、非標準ポート、query 付きの URL は起動時に拒否します。
-- 認証は `Authorization: Bearer` ではなく `api-key` ヘッダーです。
-- `PDF_JA_MODEL` にはモデル名ではなく **Azure の deployment 名**を入れます。
+  `http`、非標準ポート、query 付きの URL は保存時に拒否します。認証は `api-key`
+  ヘッダーで、モデル欄にはモデル名ではなく **deployment 名**を入れます。
 
-#### API キーの登録
+#### クラウドの接続には明示的な許可が要る
 
-画面上部の「APIキー」欄に貼り付けて **登録** を押します。`provider` がクラウドの
-ときだけこの欄が出ます。登録するとすぐ翻訳が始まり、サーバーを立て直す必要は
-ありません。**削除** で消せます。登録済みかどうかだけが表示され、鍵そのものは
-画面にもサーバーの応答にも戻りません。
+クラウドの接続を保存するには **「原文をこの送信先へ送ることを許可する」** に
+チェックが要ります。許可は**その接続にだけ**付きます。あとから別のクラウド接続を
+足しても、そちらには自動で及びません。
 
-鍵が未登録のままでもサーバーは起動して画面を配信します（起動ログには注意が出ます）。
-原文は送られず、PDF を開くと「API キーが登録されていません」と出ます。
+#### 送信先を変えると鍵は破棄される
 
-端末からも登録できます。履歴やログへ残さないため TTY（対話端末）からだけ受け付け、
-リダイレクトや pipe からの入力は拒否します。
+保存済みの接続の**種類か送信先を変えると、その接続の API キーは破棄され**、再入力が
+必要になります。別の送信先へ古い鍵を持ち越さないためです。名前やモデルだけを変えた
+ときは鍵を保ちます。
+
+#### 切り替えたときに起きること
+
+- 開いている文書へ**その場で反映されます**。実行中の翻訳は打ち切られ、新しい送信先と
+  モデルで訳し直します。サーバーを立て直す必要はありません。
+- 訳文キャッシュの鍵にはモデル名が入っているので、**前に同じモデルで訳した分は
+  キャッシュから即座に戻ります**。ローカルとクラウドを往復しても訳し直しにはなりません。
+- 鍵の無いクラウド接続へ切り替えると、切り替えは通りますが翻訳は始まらず、
+  「API キーが登録されていません」と出ます。その場で登録すれば続きを訳し始めます。
+- 選択中の接続を編集・削除したときも同じ扱いです。
+
+#### API キーの扱い
+
+登録済みかどうかだけが画面に出ます。**鍵そのもの・その断片・長さは、画面にも
+サーバーの応答にも戻りません。** 保存は Windows の DPAPI（CurrentUser）で、復号
+できるのは登録したときと同じ Windows ユーザー・同じ PC だけです。
+
+端末からも登録できます。こちらは**選択中の接続**に効きます。履歴やログへ残さない
+ため TTY（対話端末）からだけ受け付け、リダイレクトや pipe からの入力は拒否します。
 
 ```powershell
 node dist-web/server.cjs --set-key    # 表示されない入力欄へ API キーを入力
-node dist-web/server.cjs --clear-key  # 登録した API キーを削除
+node dist-web/server.cjs --clear-key  # 選択中の接続の API キーを削除
 ```
 
-どちらで登録しても、キーは Windows の DPAPI で暗号化して保存します。復号できるのは、
-登録したときと同じ Windows ユーザー・同じ PC だけです。平文を環境変数や設定ファイルへ
-書かないでください。
+クラウドで動いている間は、画面上部に送信先ホストを常時表示します。API キー、URL の
+パス、query は表示しません。
 
-クラウドを使うと原文が `PDF_JA_BASE_URL` の送信先へ出ます。クラウドで動いている間は、
-画面上部に送信先ホストを常時表示します。API キー、URL のパス、query は表示しません。
+#### 環境変数からの移行
 
-翻訳中に鍵を削除しても、そのとき動いているセッションの送信は止まりません。次に PDF を
-開いたときから止まります。確実に止めるにはサーバーを終了してください。
+以前の版は `PDF_JA_PROVIDER` / `PDF_JA_BASE_URL` / `PDF_JA_MODEL` /
+`PDF_JA_CLOUD_ALLOWED` で送信先を決めていました。**初回起動時に一度だけ**、これらと
+保存済みの API キーから接続を作り、選択中にします。クラウド構成から移行したときは、
+切り替え先としてローカルの Ollama 接続も併せて作ります。
+
+移行後、この 4 つは**読まれません**。まだ設定されていると、起動ログに次が出ます。
+
+```
+注意: PDF_JA_PROVIDER などは使われません。送信先は画面の接続一覧で選びます。
+```
+
+`PDF_JA_PORT` や `PDF_JA_DATA_DIR`、抽出器まわりの環境変数は今までどおりです。
+変わったのは「どの LLM へ送るか」の 4 つだけです。
 
 ### ダブルクリックで起動する
 
@@ -201,21 +223,20 @@ powershell -File scripts/install-shortcut.ps1
 | `dist-web/` の配信資産 | **止まる**。`npm run build:web` を促す |
 | 抽出器（Docker の応答と抽出イメージ、または `PDF_JA_PYTHON`） | **止まる**。Docker Desktop の起動か `setup-pdf.ps1` を促す |
 | Ollama の応答と既定モデル | **止まらない**。訳が出ないだけなので警告に留める |
-| クラウドの送信許可（`PDF_JA_CLOUD_ALLOWED`）とモデル名（`PDF_JA_MODEL`） | **止まる**。どちらも環境変数でしか直せない |
-| クラウドの API キー | **止まらない**。画面から登録できるので、警告に留めて画面を配信する |
+| 選択中の接続の API キー・モデル名 | **止まらない**。どちらも画面から直せるので、警告に留めて画面を配信する |
+| 選択中の送信先への疎通 | **止まらない**。訳が出ないだけなので警告に留める |
 
 ショートカットから起動したときは `--launcher` が付きます。この印があると、止まった
 ときに窓を開いたままにして、何が足りないかを読めるようにします。
 
 ## 設定（環境変数）
 
+送信先・モデル・クラウド送信の許可は、ここではなく**画面の接続一覧**で決めます（「接続を登録して切り替える」を見てください）。ここに残るのは、起動のしかたと
+抽出まわりの設定だけです。
+
 | 変数 | 既定 | 意味 |
 |---|---|---|
 | `PDF_JA_PORT` | `7391` | 待ち受けポート。`127.0.0.1` にだけ bind します |
-| `PDF_JA_PROVIDER` | `ollama` | `ollama` / `openai` / `azure`。クラウドは opt-in です |
-| `PDF_JA_BASE_URL` | `https://api.openai.com/v1` | `openai` / `azure` のときの送信先。`azure` は公式 endpoint の `/openai/v1` だけ |
-| `PDF_JA_CLOUD_ALLOWED` | （未設定） | `1` のときだけクラウド送信を許可します |
-| `PDF_JA_MODEL` | Ollama: `qwen3.5:9b-q4_K_M` / cloud: なし | 翻訳モデル。クラウドでは必ず明示します。`azure` では deployment 名 |
 | `PDF_JA_OLLAMA_ENDPOINT` | `http://127.0.0.1:11434` | ループバック以外は拒否します |
 | `PDF_JA_DATA_DIR` | `%LOCALAPPDATA%\pdf-ja-preview` | キャッシュと一時ファイルの置き場所 |
 | `PDF_JA_EXTRACTOR_IMAGE` | `pdf-ja-extractor:1` | 抽出イメージ |
@@ -241,7 +262,7 @@ powershell -File scripts/install-shortcut.ps1
 
 ```
 %LOCALAPPDATA%\pdf-ja-preview\
-  settings.json                         DPAPI で暗号化した API キー
+  settings.json                         接続の一覧と選択（API キーは DPAPI で暗号化）
   docs\<文書のsha256>\document.json   抽出結果
   docs\<文書のsha256>\tr\<鍵>.json    訳文
   tmp\<サーバーID>\*.pdf              閲覧中の PDF（サーバーを閉じると消えます）
@@ -250,8 +271,8 @@ powershell -File scripts/install-shortcut.ps1
 - 画面の **「保存した訳を消す」** で、その文書の訳だけ消せます。
 - **「閉じる」** で、その文書の一時 PDF をサーバーから外します。
 - フォルダごと消しても問題ありません。次に開いたときに取り直します。ただし
-  `settings.json` も消えるので、**登録した API キーは戻りません**。クラウドを使って
-  いるなら登録し直してください。
+  `settings.json` も消えるので、**登録した接続と API キーは戻りません**。次の起動で
+  既定の接続が作り直されるので、登録し直してください。
 
 異常終了で一時 PDF が残っても、次にサーバーを起動したときに回収します。生きている
 別のサーバーが使っているものは残します。
@@ -262,9 +283,11 @@ powershell -File scripts/install-shortcut.ps1
 |---|---|
 | 「抽出に失敗」で止まる | Docker Desktop が動いているか。`docker run --rm pdf-ja-extractor:1 --help` |
 | 訳が出ない・「失敗」が並ぶ | Ollama が動いているか、モデル名が合っているか。`curl http://127.0.0.1:11434/api/tags` |
-| クラウドで「API キーが登録されていません」と出る | 画面上部の「APIキー」欄から登録する。`--set-key` でも可 |
-| クラウドで「APIキー」欄が出ない | `PDF_JA_PROVIDER` が `openai` か `azure` になっているか。既定の `ollama` では出ません |
-| Azure で起動時に送信先を拒否される | `PDF_JA_BASE_URL` が `https://<resource>.openai.azure.com/openai/v1` の形か。`PDF_JA_MODEL` は deployment 名か |
+| クラウドで「API キーが登録されていません」と出る | 「接続を管理」でその接続に鍵を登録する。`--set-key` でも可 |
+| 管理画面に「APIキー」欄が出ない | 種類が「ローカル Ollama」になっている。ローカルでは鍵は要りません |
+| Azure の接続を保存できない | 送信先が `https://<resource>.openai.azure.com/openai/v1` の形か。モデル欄は deployment 名か。送信許可にチェックを入れたか |
+| 環境変数を変えたのに送信先が変わらない | 移行後は読まれません。画面の接続一覧で選んでください |
+| 鍵を入れ直すよう言われる | 種類か送信先を変えると、その接続の鍵は破棄されます |
 | 「文章を抽出できません」 | 文字が入っていない PDF です。初期版では扱えません |
 | 「図や表の中の文字 N 件は訳しません」 | 仕様です。図の下に畳んであります |
 | ページの位置がずれる | 「ページの寸法が一致しません」の警告が出ていれば、位置同期は切ってあります |
