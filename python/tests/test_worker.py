@@ -113,9 +113,11 @@ def test_encrypted_pdf_is_rejected(capsys, tmp_path: Path, fixtures_dir: Path) -
     assert payload["error"]["code"] == "encrypted-pdf"
 
 
-def test_301_pages_is_rejected(capsys, tmp_path: Path) -> None:
+def test_one_page_over_the_limit_is_rejected(capsys, tmp_path: Path) -> None:
+    # 上限は worker から取る。ここに数字を書き写すと、上限を変えたときに
+    # 「拒否されるはず」の紙が拒否されなくなっても試験が気づけない。
     writer = PdfWriter()
-    for _ in range(301):
+    for _ in range(worker.MAX_PAGES + 1):
         writer.add_blank_page(width=600, height=800)
     path = tmp_path / "big.pdf"
     with path.open("wb") as handle:

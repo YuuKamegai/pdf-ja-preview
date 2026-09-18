@@ -25,7 +25,8 @@ from . import EXTRACTOR_VERSION
 from .normalize import normalize_document
 from .pdfinfo import PdfInputError, read_pdf_info
 
-MAX_PAGES = 300
+# `web/shared/protocol.ts` の MAX_PAGES と一致させる（test/web/limits.test.ts が縛る）。
+MAX_PAGES = 500
 
 
 def config_hash(models: str) -> str:

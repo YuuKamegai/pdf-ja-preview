@@ -19,8 +19,15 @@ import { parseDocument, type PdfDocument } from '../shared/document';
 export const MAX_STDOUT_BYTES = 32 * 1024 * 1024;
 /** stderr は末尾だけ持つ。 */
 export const MAX_STDERR_BYTES = 64 * 1024;
-/** 抽出の既定タイムアウト。 */
-export const DEFAULT_EXTRACTION_TIMEOUT_MS = 600_000;
+/**
+ * 抽出の既定タイムアウト。
+ *
+ * `MAX_PAGES` と対で決める。ここが足りないと、上限内のページ数なのに
+ * 「ページ数超過」ではなく打ち切りという分かりにくい失敗になる。
+ * 上限いっぱい（500 ページ）を遅い機械（1.5 秒/ページ想定）で通せる幅を取る。
+ * test/web/limits.test.ts が両者の整合を縛る。
+ */
+export const DEFAULT_EXTRACTION_TIMEOUT_MS = 1_200_000;
 
 export class ExtractorError extends Error {
   readonly code: string;

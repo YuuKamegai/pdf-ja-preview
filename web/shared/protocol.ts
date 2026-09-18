@@ -7,9 +7,22 @@
 
 import type { PdfDocument, TranslationState } from './document';
 
-/** 初期版の既定上限。超過は処理開始前、またはページ数が判明した時点で拒否する。 */
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-export const MAX_PAGES = 300;
+/**
+ * 既定上限。超過は処理開始前、またはページ数が判明した時点で拒否する。
+ *
+ * ページ数は抽出コストを決めるので、既定の打ち切り（1200 秒）で終わる範囲に置く。
+ * CPU 4 スレッドの実測は固定費 25 秒 + 約 0.75 秒/ページなので、500 ページは
+ * 約 400 秒。遅い機械（1.5 秒/ページ想定）でも 780 秒で収まる。ここを超える
+ * 上限を置くと、利用者は「ページ数超過」ではなく打ち切りという分かりにくい
+ * 失敗を受け取る。
+ *
+ * byte 数は抽出コストの目安にならない（実測した 390 ページの本は 58 MiB あるが
+ * 本文は 798 KB で 1.3%。残りは画像とフォント）。上限はページ数の側で効かせ、
+ * こちらは無茶な入力を弾くだけの枠として広めに取る。
+ */
+export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+/** `python/pdf_ja/worker.py` の MAX_PAGES と一致させる（test/web/limits.test.ts が縛る）。 */
+export const MAX_PAGES = 500;
 /** JSON API の body 上限。 */
 export const MAX_JSON_BYTES = 64 * 1024;
 /** モデル名・ID の上限。長さで殴られないようにする。 */

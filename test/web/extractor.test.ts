@@ -161,8 +161,9 @@ test('遅いワーカーでも期限内なら成功する', async () => {
   assert.equal(document.blocks.length, 1);
 });
 
-test('既定のタイムアウトは 10 分', () => {
-  assert.equal(DEFAULT_EXTRACTION_TIMEOUT_MS, 600_000);
+test('既定のタイムアウトは 20 分', () => {
+  // MAX_PAGES と対で決めている。関係そのものは limits.test.ts が縛る。
+  assert.equal(DEFAULT_EXTRACTION_TIMEOUT_MS, 1_200_000);
 });
 
 test('docker 版はネットワークを切り、PDF を読み取り専用で渡す', () => {
