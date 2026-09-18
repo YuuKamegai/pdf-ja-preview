@@ -7,7 +7,7 @@
 
 import { createHash } from 'node:crypto';
 
-import type { ProviderConfig } from '../../src/translate/provider';
+import { describeTarget, type ProviderConfig } from '../../src/translate/provider';
 import type { PdfBlock, PdfDocument, TranslationState } from '../shared/document';
 import type { ServerEvent, Snapshot } from '../shared/protocol';
 import { Scheduler } from './scheduler';
@@ -135,6 +135,8 @@ export class Session {
       page: this.#page,
       paused: this.#paused,
       model: this.#model,
+      target: describeTarget({ ...this.#provider, model: this.#model }),
+      cloud: this.#provider.kind === 'openai',
       blocks: [...this.#states.values()],
     };
     if (this.#error) snapshot.error = this.#error;

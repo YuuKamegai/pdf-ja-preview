@@ -58,6 +58,10 @@ export interface Snapshot {
   page: number;
   paused: boolean;
   model: string;
+  /** 送信先のホスト名。鍵もパスも含めない。 */
+  target: string;
+  /** クラウドへ送っているか。画面の常時表示に使う。 */
+  cloud: boolean;
   blocks: TranslationState[];
   error?: ProtocolError;
 }

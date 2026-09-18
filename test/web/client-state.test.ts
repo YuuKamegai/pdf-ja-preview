@@ -27,6 +27,8 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     page: 1,
     paused: false,
     model: 'm1',
+    target: '127.0.0.1:11434',
+    cloud: false,
     blocks: [
       { id: 'b0', sourceHash: 'h0', status: 'queued' },
       { id: 'b1', sourceHash: 'h1', status: 'translated', ja: '訳1' },

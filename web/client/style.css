@@ -81,6 +81,14 @@ button:hover {
   border-bottom: 1px solid var(--line);
 }
 
+.cloud-notice {
+  margin: 0;
+  padding: 6px 12px;
+  background: #7c2d12;
+  color: #fff7ed;
+  font-size: 0.9em;
+}
+
 .split {
   flex: 1;
   display: grid;

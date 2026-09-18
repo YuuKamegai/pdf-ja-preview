@@ -420,6 +420,12 @@ export class App {
     const snapshot = this.#snapshot;
     if (!document || !snapshot) return;
 
+    const cloudNotice = globalThis.document.getElementById('cloud-notice') as HTMLElement;
+    cloudNotice.textContent = snapshot.cloud
+      ? `原文を ${snapshot.target} へ送信しています。`
+      : '';
+    cloudNotice.hidden = !snapshot.cloud;
+
     this.#translationView.render(document, { ...snapshot, page: this.#pdfView.pageNumber });
 
     const counts = countStates(snapshot, document);

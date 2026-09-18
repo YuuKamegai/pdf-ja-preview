@@ -1,12 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import type { ProviderConfig } from '../../src/translate/provider';
 import { Scheduler } from '../../web/server/scheduler';
 import {
   PRIORITY_CURRENT,
   PRIORITY_NEXT,
   PRIORITY_REST_BASE,
   Session,
+  type ProviderConnection,
   type TranslateFn,
 } from '../../web/server/session';
 import {
@@ -86,6 +88,7 @@ async function setup(
   blocks: PdfBlock[],
   translate: TranslateFn,
   model = 'm1',
+  provider?: ProviderConfig | ProviderConnection,
 ) {
   const storage: Storage = await createTemporaryStorage();
   const scheduler = new Scheduler();
@@ -98,7 +101,7 @@ async function setup(
     model,
     storage,
     scheduler,
-    connection,
+    connection: provider ?? connection,
     translate,
   });
   session.subscribe((event) => events.push(event));
@@ -109,6 +112,44 @@ async function setup(
   });
   return { storage, scheduler, session, events };
 }
+
+test('snapshot は送信先のホスト名を持つ', async (t) => {
+  const { session } = await setup(t, [block('b0', 0, 1)], async () => 'ja', 'gpt-test', {
+    kind: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: 'sk-test',
+    model: 'gpt-test',
+    temperature: 0.2,
+    timeoutMs: 1000,
+  });
+  const snapshot = session.snapshot();
+  assert.equal(snapshot.target, 'api.openai.com');
+  assert.equal(snapshot.cloud, true);
+});
+
+test('ローカルなら cloud は false', async (t) => {
+  const { session } = await setup(t, [block('b0', 0, 1)], async () => 'ja', 'm1', {
+    kind: 'ollama',
+    endpoint: 'http://127.0.0.1:11434',
+    think: false,
+    temperature: 0.2,
+    timeoutMs: 1000,
+  });
+  assert.equal(session.snapshot().cloud, false);
+  assert.equal(session.snapshot().target, '127.0.0.1:11434');
+});
+
+test('snapshot に API キーが現れない', async (t) => {
+  const { session } = await setup(t, [block('b0', 0, 1)], async () => 'ja', 'gpt-test', {
+    kind: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: 'sk-secret-value',
+    model: 'gpt-test',
+    temperature: 0.2,
+    timeoutMs: 1000,
+  });
+  assert.equal(JSON.stringify(session.snapshot()).includes('sk-secret-value'), false);
+});
 
 function stateOf(session: Session, id: string): TranslationState {
   const found = session.snapshot().blocks.find((state) => state.id === id);
