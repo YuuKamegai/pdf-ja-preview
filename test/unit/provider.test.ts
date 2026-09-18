@@ -51,6 +51,17 @@ test('Azure の公式 endpoint を v1 URL に正規化する', () => {
     normalizeAzureBaseUrl('https://sample.openai.azure.com/openai/v1/'),
     'https://sample.openai.azure.com/openai/v1',
   );
+  assert.equal(
+    normalizeAzureBaseUrl('https://sample.openai.azure.com:443/openai/v1'),
+    'https://sample.openai.azure.com/openai/v1',
+  );
+});
+
+test('Azure の非標準 port を拒否する', () => {
+  assert.throws(
+    () => normalizeAzureBaseUrl('https://sample.openai.azure.com:444/openai/v1'),
+    ProviderConfigError,
+  );
 });
 
 test('Azure は公式ホストと既知の v1 path 以外を拒否する', () => {

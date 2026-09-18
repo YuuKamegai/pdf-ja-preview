@@ -57,6 +57,7 @@ export function normalizeAzureBaseUrl(raw: string): string {
   if (
     url.protocol !== 'https:' ||
     !officialHost.test(url.hostname) ||
+    (url.port !== '' && url.port !== '443') ||
     url.username !== '' ||
     url.password !== '' ||
     url.search !== '' ||

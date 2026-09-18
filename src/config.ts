@@ -1,5 +1,7 @@
 import { normalizeAzureBaseUrl, type ProviderConfig } from './translate/provider';
 
+export const DEFAULT_OLLAMA_MODEL = 'qwen3.5:9b-q4_K_M';
+
 export interface ResolvedConfig {
   /** apiKey は常に空。SecretStorage から後で差し込む。 */
   provider: ProviderConfig;
@@ -16,7 +18,11 @@ function pick<T>(value: unknown, fallback: T, type: 'string' | 'number' | 'boole
 export function resolveConfig(read: (key: string) => unknown): ResolvedConfig {
   const requestedKind = read('provider');
   const kind = requestedKind === 'openai' || requestedKind === 'azure' ? requestedKind : 'ollama';
-  const model = pick(read('model'), 'qwen3.5:9b-q4_K_M', 'string');
+  const configuredModel = pick(read('model'), '', 'string');
+  const model =
+    kind === 'ollama' && configuredModel.trim() === ''
+      ? DEFAULT_OLLAMA_MODEL
+      : configuredModel;
   const temperature = pick(read('temperature'), 0.2, 'number');
   const timeoutMs = pick(read('requestTimeoutMs'), 120000, 'number');
 

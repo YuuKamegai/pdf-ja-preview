@@ -55,8 +55,8 @@
         },
         "mdJaPreview.model": {
           "type": "string",
-          "default": "qwen3.5:9b-q4_K_M",
-          "description": "翻訳に使うモデル名。Azure では deployment 名を指定します。"
+          "default": "",
+          "description": "翻訳に使うモデル名。Ollama は空なら既定モデルを使い、OpenAI はモデル名、Azure は deployment 名を必須とします。"
         },
         "mdJaPreview.think": {
           "type": "boolean",

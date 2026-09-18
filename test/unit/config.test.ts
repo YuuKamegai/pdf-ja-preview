@@ -60,6 +60,21 @@ test('provider を azure にすると公式 endpoint を正規化して deployme
   assert.equal(config.provider.apiKey, '');
 });
 
+test('cloud provider はモデル未指定でも Ollama の既定モデルを継承しない', () => {
+  const openai = resolveConfig(reader({ provider: 'openai' }));
+  assert.equal(openai.provider.model, '');
+
+  const azure = resolveConfig(
+    reader({ provider: 'azure', baseUrl: 'https://sample.openai.azure.com/openai/v1' }),
+  );
+  assert.equal(azure.provider.model, '');
+});
+
+test('Ollama はモデルが空または未指定なら既定モデルへ補完する', () => {
+  assert.equal(resolveConfig(reader({})).provider.model, 'qwen3.5:9b-q4_K_M');
+  assert.equal(resolveConfig(reader({ model: '' })).provider.model, 'qwen3.5:9b-q4_K_M');
+});
+
 test('鍵は設定から読まない（常に空）', () => {
   const config = resolveConfig(reader({ provider: 'openai', apiKey: 'sk-leak' }));
   if (config.provider.kind !== 'openai') throw new Error('unreachable');

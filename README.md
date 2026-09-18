@@ -61,7 +61,7 @@ ollama pull qwen3.5:9b-q4_K_M
 | `mdJaPreview.baseUrl` | `https://api.openai.com/v1` | `openai` のときの送信先。API キーは書きません。 |
 | `mdJaPreview.cloudAllowed` | `false` | 原文を外部へ送ることを明示的に許可します。 |
 | `mdJaPreview.endpoint` | `http://127.0.0.1:11434` | Ollama のベース URL。 |
-| `mdJaPreview.model` | `qwen3.5:9b-q4_K_M` | 翻訳モデル。既定値は Ollama 用です。クラウド用の既定モデル名は無いため、利用者が明示指定します。 |
+| `mdJaPreview.model` | （空） | 翻訳モデル。空なら Ollama だけ `qwen3.5:9b-q4_K_M` を使います。クラウド用の既定モデル名は無いため、利用者が明示指定します。 |
 | `mdJaPreview.think` | `false` | thinking を有効にする。有効にすると推論文が訳文へ混ざることがある。 |
 | `mdJaPreview.temperature` | `0.2` | 生成温度。 |
 | `mdJaPreview.requestTimeoutMs` | `120000` | 1 ブロックあたりのタイムアウト（ミリ秒）。 |

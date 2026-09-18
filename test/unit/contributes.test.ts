@@ -34,3 +34,12 @@ test('provider 設定で Azure OpenAI を選べる', () => {
     'azure',
   ]);
 });
+
+test('package のモデル既定値は空で provider ごとの解決に委ねる', () => {
+  const pkg = JSON.parse(
+    readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+  ) as {
+    contributes: { configuration: { properties: Record<string, { default?: unknown }> } };
+  };
+  assert.equal(pkg.contributes.configuration.properties['mdJaPreview.model']?.default, '');
+});
