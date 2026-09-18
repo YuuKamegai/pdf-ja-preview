@@ -20,6 +20,11 @@ import {
   ProtocolContractError,
   type ServerEvent,
 } from '../shared/protocol';
+import {
+  ConnectionError,
+  type ConnectionInput,
+  type ConnectionView,
+} from './connection';
 import { DocumentStore, UploadError } from './documents';
 import { Scheduler } from './scheduler';
 import {
@@ -32,23 +37,28 @@ import {
 import { Session, type ProviderConnection, type TranslateFn } from './session';
 import { Storage } from './storage';
 
+/** 制御文字。ヘッダーへ載る値から締め出す。 */
+const CONTROL_CHARS = new RegExp('[\u0000-\u001f\u007f]');
+
 /** SSE の生存確認。 */
 export const HEARTBEAT_MS = 15_000;
 /** この時間つながらないままならセッションを捨てる。 */
 export const SESSION_GRACE_MS = 5 * 60_000;
 
 /**
- * 画面から API キーを登録・削除する口。ローカル provider では渡さない。
+ * 接続の登録・選択・試験の口。
  *
- * 鍵そのものは決して外へ返さない。登録されているかどうかだけを答える。
+ * 鍵そのものは決して外へ返さない。登録されているかどうか（`configured`）だけを答える。
  */
-export interface CloudKeyControl {
-  /** 送信先のホスト名。表示にだけ使う。鍵もパスもクエリも含めない。 */
-  target: string;
-  /** 登録されているか。値は返さない。 */
-  configured(): Promise<boolean>;
-  set(value: string): Promise<void>;
-  clear(): Promise<void>;
+export interface ConnectionControl {
+  list(): Promise<{ selected: string; connections: ConnectionView[] }>;
+  add(input: ConnectionInput, apiKey?: string | null): Promise<void>;
+  update(name: string, input: ConnectionInput, apiKey?: string | null): Promise<void>;
+  remove(name: string): Promise<void>;
+  select(name: string): Promise<void>;
+  test(name: string): Promise<{ ok: boolean; detail: string }>;
+  /** 選択中の接続から、いま送るときの設定とモデルを組む。 */
+  resolveSelected(): Promise<{ name: string; model: string; connection: ProviderConnection }>;
 }
 
 export interface AppDeps {
@@ -56,13 +66,10 @@ export interface AppDeps {
   storage: Storage;
   scheduler: Scheduler;
   /**
-   * セッションを作るたびに呼ぶ。鍵は画面から登録・削除できるので、起動時の値を
-   * 使い回さず、そのつど最新の設定から組み直す。model はセッションごとの値で
-   * 差し替える。
+   * 登録済みの接続。セッションを作るたび、また選択が変わるたびに解決し直す。
+   * 起動時の値を使い回さない。
    */
-  resolveConnection(): Promise<ProviderConnection>;
-  /** クラウドの鍵を画面から扱う口。ローカルなら undefined。 */
-  cloudKey?: CloudKeyControl;
+  connections: ConnectionControl;
   defaultModel: string;
   /** 静的ファイルの置き場所。ここから外へは出さない。 */
   staticRoot: string;
@@ -240,15 +247,26 @@ export function createApp(deps: AppDeps): AppServer {
       }
     }
 
-    if (parts[0] === 'settings' && parts[1] === 'api-key' && parts.length === 2) {
-      if (method === 'GET') {
+    if (parts[0] === 'connections') {
+      if (parts.length === 1 && method === 'GET') {
         request.resume();
-        return getApiKey(response);
+        return listConnections(response);
       }
-      if (method === 'PUT') return putApiKey(request, response);
-      if (method === 'DELETE') {
-        request.resume();
-        return deleteApiKey(response);
+      if (parts.length === 1 && method === 'POST') return addConnection(request, response);
+      if (parts.length === 2 && parts[1] === 'selected' && method === 'PUT') {
+        return selectConnection(request, response);
+      }
+      const name = parts[1] === undefined ? undefined : decodeURIComponent(parts[1]);
+      if (name !== undefined) {
+        if (parts.length === 2 && method === 'PUT') return updateConnection(request, response, name);
+        if (parts.length === 2 && method === 'DELETE') {
+          request.resume();
+          return removeConnection(response, name);
+        }
+        if (parts.length === 3 && parts[2] === 'test' && method === 'POST') {
+          request.resume();
+          return testConnection(response, name);
+        }
       }
     }
 
@@ -389,16 +407,19 @@ export function createApp(deps: AppDeps): AppServer {
     createReadStream(path, { start, end }).pipe(response);
   }
 
-  // ---- API キー -----------------------------------------------------------
+  // ---- 接続 ---------------------------------------------------------------
 
   /**
    * 受け取った鍵を確かめる。
    *
    * ヘッダーに載せる値なので、制御文字（改行を含む）が混ざったものは受け取らない。
    * 拒否の理由は書くが、受け取った値そのものは決して返さない。
+   *
+   * undefined は「触らない」、null は「消す」、文字列は「登録する」。
    */
-  function cleanApiKey(body: unknown): string {
-    const value = (body as { apiKey?: unknown } | null)?.apiKey;
+  function cleanApiKey(value: unknown): string | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
     if (typeof value !== 'string') {
       throw new ProtocolContractError('invalid-api-key', 'apiKey を文字列で送ってください');
     }
@@ -406,60 +427,118 @@ export function createApp(deps: AppDeps): AppServer {
     if (trimmed === '') {
       throw new ProtocolContractError('invalid-api-key', 'API キーが空です');
     }
-    if (/[\u0000-\u001f\u007f]/.test(trimmed)) {
-      throw new ProtocolContractError(
-        'invalid-api-key',
-        'API キーに改行や制御文字は使えません',
-      );
+    if (CONTROL_CHARS.test(trimmed)) {
+      throw new ProtocolContractError('invalid-api-key', 'API キーに改行や制御文字は使えません');
     }
     return trimmed;
   }
 
-  /** 登録の有無だけを返す。鍵は載せない。 */
-  async function apiKeyStatus(): Promise<{
-    configured: boolean;
-    cloud: boolean;
-    target: string;
-  }> {
-    const control = deps.cloudKey;
-    if (!control) return { configured: false, cloud: false, target: '' };
-    return { configured: await control.configured(), cloud: true, target: control.target };
+  function connectionInput(body: Record<string, unknown>): ConnectionInput {
+    return {
+      name: body.name,
+      provider: body.provider,
+      baseUrl: body.baseUrl,
+      model: body.model,
+      trust: body.trust,
+    };
   }
 
-  async function getApiKey(response: http.ServerResponse): Promise<void> {
-    sendJson(response, 200, await apiKeyStatus());
+  async function sendConnections(response: http.ServerResponse): Promise<void> {
+    sendJson(response, 200, await deps.connections.list());
   }
 
-  async function putApiKey(
+  /** 接続の規則違反を HTTP へ写す。返せたら true。 */
+  function connectionFailure(response: http.ServerResponse, error: unknown): boolean {
+    if (!(error instanceof ConnectionError)) return false;
+    sendError(
+      response,
+      error.code === 'unknown-connection' ? 404 : 400,
+      error.code,
+      error.message,
+    );
+    return true;
+  }
+
+  /** 選択中の接続を、開いているセッション全部へ配る。古い送信先への送信を止める。 */
+  async function applySelectedConnection(): Promise<void> {
+    const resolved = await deps.connections.resolveSelected();
+    for (const entry of sessions.values()) {
+      entry.session.setConnection(resolved.connection, resolved.model, resolved.name);
+    }
+  }
+
+  async function listConnections(response: http.ServerResponse): Promise<void> {
+    await sendConnections(response);
+  }
+
+  async function addConnection(
     request: http.IncomingMessage,
     response: http.ServerResponse,
   ): Promise<void> {
-    const body = await readJsonBody(request);
-    const control = deps.cloudKey;
-    if (!control) {
-      return sendError(
-        response,
-        409,
-        'local-provider',
-        '手元の Ollama を使っています。API キーは要りません。',
-      );
+    const body = (await readJsonBody(request)) as Record<string, unknown>;
+    const apiKey = cleanApiKey(body.apiKey);
+    try {
+      await deps.connections.add(connectionInput(body), apiKey);
+    } catch (error) {
+      if (connectionFailure(response, error)) return;
+      throw error;
     }
-    await control.set(cleanApiKey(body));
-    sendJson(response, 200, await apiKeyStatus());
+    await sendConnections(response);
   }
 
-  async function deleteApiKey(response: http.ServerResponse): Promise<void> {
-    const control = deps.cloudKey;
-    if (!control) {
-      return sendError(
-        response,
-        409,
-        'local-provider',
-        '手元の Ollama を使っています。API キーは要りません。',
-      );
+  async function updateConnection(
+    request: http.IncomingMessage,
+    response: http.ServerResponse,
+    name: string,
+  ): Promise<void> {
+    const body = (await readJsonBody(request)) as Record<string, unknown>;
+    const apiKey = cleanApiKey(body.apiKey);
+    try {
+      await deps.connections.update(name, connectionInput(body), apiKey);
+    } catch (error) {
+      if (connectionFailure(response, error)) return;
+      throw error;
     }
-    await control.clear();
-    sendJson(response, 200, await apiKeyStatus());
+    await applySelectedConnection();
+    await sendConnections(response);
+  }
+
+  async function removeConnection(response: http.ServerResponse, name: string): Promise<void> {
+    try {
+      await deps.connections.remove(name);
+    } catch (error) {
+      if (connectionFailure(response, error)) return;
+      throw error;
+    }
+    await applySelectedConnection();
+    await sendConnections(response);
+  }
+
+  async function selectConnection(
+    request: http.IncomingMessage,
+    response: http.ServerResponse,
+  ): Promise<void> {
+    const body = (await readJsonBody(request)) as Record<string, unknown>;
+    if (typeof body.name !== 'string') {
+      throw new ProtocolContractError('invalid-body', 'name を文字列で送ってください');
+    }
+    try {
+      await deps.connections.select(body.name);
+    } catch (error) {
+      if (connectionFailure(response, error)) return;
+      throw error;
+    }
+    await applySelectedConnection();
+    await sendConnections(response);
+  }
+
+  async function testConnection(response: http.ServerResponse, name: string): Promise<void> {
+    try {
+      sendJson(response, 200, await deps.connections.test(name));
+    } catch (error) {
+      if (connectionFailure(response, error)) return;
+      throw error;
+    }
   }
 
   // ---- セッション ---------------------------------------------------------
@@ -477,20 +556,20 @@ export function createApp(deps: AppDeps): AppServer {
     const hash = deps.documents.hashOf(body.documentId);
     if (hash === undefined) return sendError(response, 404, 'unknown-document', '文書がありません');
 
-    // 鍵は画面から登録・削除できる。起動時の値ではなく、今の設定で組み直す。
+    // 接続は画面から登録・切り替えできる。起動時の値ではなく、今の選択で組み直す。
     // 文書を掴む前に確かめる。断るときに掴んだままにしない。
-    let connection: ProviderConnection;
+    let resolved: { name: string; model: string; connection: ProviderConnection };
     try {
-      connection = await deps.resolveConnection();
+      resolved = await deps.connections.resolveSelected();
     } catch (error) {
       return sendError(response, 409, 'not-sendable', (error as Error).message);
     }
-    if (connection.kind !== 'ollama' && connection.apiKey.trim() === '') {
+    if (resolved.connection.kind !== 'ollama' && resolved.connection.apiKey.trim() === '') {
       return sendError(
         response,
         409,
         'no-api-key',
-        'API キーが登録されていません。画面の「APIキー」から登録してください。',
+        'API キーが登録されていません。画面の「接続を管理」から登録してください。',
       );
     }
 
@@ -503,10 +582,11 @@ export function createApp(deps: AppDeps): AppServer {
       documentId: body.documentId,
       documentHash: hash,
       document: job.document,
-      model: body.model,
+      connectionName: resolved.name,
+      model: resolved.model,
       storage: deps.storage,
       scheduler: deps.scheduler,
-      connection,
+      connection: resolved.connection,
       translate: deps.translate,
     });
     const entry: SessionEntry = {
@@ -544,7 +624,6 @@ export function createApp(deps: AppDeps): AppServer {
       if (patch.paused) entry.session.pause();
       else entry.session.resume();
     }
-    if (patch.model !== undefined) entry.session.setModel(patch.model);
     sendJson(response, 200, entry.session.snapshot());
   }
 

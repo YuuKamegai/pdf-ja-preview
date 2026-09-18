@@ -12,7 +12,8 @@ import { runExtractorProcess, type Extractor } from '../../web/server/extractor'
 import { createApp } from '../../web/server/http';
 import { Scheduler } from '../../web/server/scheduler';
 import { TOKEN_HEADER, allowedHostsFor, createToken } from '../../web/server/security';
-import type { CloudKeyControl } from '../../web/server/http';
+import { ConnectionError } from '../../web/server/connection';
+import type { ConnectionControl } from '../../web/server/http';
 import type { ProviderConnection, TranslateFn } from '../../web/server/session';
 import { createTemporaryStorage } from '../../web/server/storage';
 import type { PdfDocument } from '../../web/shared/document';
@@ -68,22 +69,13 @@ function fakeExtractor(mode = 'ok'): Extractor {
 
 const echo: TranslateFn = async (block) => `訳: ${block.source}`;
 
-const OLLAMA: ProviderConnection = {
-  kind: 'ollama',
-  endpoint: 'http://127.0.0.1:11434',
-  think: false,
-  temperature: 0.2,
-  timeoutMs: 1000,
-};
-
 async function startServer(
   t: { after: (fn: () => unknown) => void },
   options: {
     extractor?: Extractor;
     translate?: TranslateFn;
     graceMs?: number;
-    resolveConnection?: () => Promise<ProviderConnection>;
-    cloudKey?: CloudKeyControl;
+    connections?: ConnectionControl;
   } = {},
 ) {
   const storage = await createTemporaryStorage();
@@ -107,8 +99,7 @@ async function startServer(
     documents,
     storage,
     scheduler,
-    resolveConnection: options.resolveConnection ?? (async () => OLLAMA),
-    cloudKey: options.cloudKey,
+    connections: options.connections ?? fakeConnections().control,
     defaultModel: 'm1',
     staticRoot,
     security: { token, allowedHosts },
@@ -322,7 +313,7 @@ test('使用中の文書は 409、未使用なら 204', async (t) => {
   const created = await call('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'm1' }),
+    body: JSON.stringify({ documentId: job.documentId }),
   });
   assert.equal(created.status, 201);
   const snapshot = (await created.json()) as Snapshot;
@@ -342,7 +333,7 @@ test('抽出前のセッション作成は 409', async (t) => {
   const response = await call('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'm1' }),
+    body: JSON.stringify({ documentId: job.documentId }),
   });
   assert.equal(response.status, 409);
 });
@@ -355,22 +346,23 @@ test('セッションを作ると翻訳が始まり、PATCH で状態が変わ�
   const created = await call('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'm1' }),
+    body: JSON.stringify({ documentId: job.documentId }),
   });
   const snapshot = (await created.json()) as Snapshot;
   assert.equal(snapshot.page, 1);
+  // モデルは選択中の接続が決める。クライアントは指定しない。
   assert.equal(snapshot.model, 'm1');
+  assert.equal(snapshot.connection, 'local');
   assert.equal(snapshot.blocks.length, 1);
 
   const patched = await call(`/api/sessions/${snapshot.sessionId}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ paused: true, model: 'm2' }),
+    body: JSON.stringify({ paused: true }),
   });
   const after = (await patched.json()) as Snapshot;
   assert.equal(after.paused, true);
-  assert.equal(after.model, 'm2');
-  assert.ok(after.generation > snapshot.generation);
+  assert.equal(after.model, 'm1');
 });
 
 test('文書の範囲を超えるページ指定は 400', async (t) => {
@@ -380,7 +372,7 @@ test('文書の範囲を超えるページ指定は 400', async (t) => {
   const created = await call('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'm1' }),
+    body: JSON.stringify({ documentId: job.documentId }),
   });
   const snapshot = (await created.json()) as Snapshot;
 
@@ -414,7 +406,7 @@ test('SSE は最初に snapshot を送り、訳が届く', async (t) => {
   const created = await call('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'm1' }),
+    body: JSON.stringify({ documentId: job.documentId }),
   });
   const snapshot = (await created.json()) as Snapshot;
 
@@ -436,7 +428,7 @@ test('つなぎ直すたびに snapshot から始まる', async (t) => {
   const created = await call('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'm1' }),
+    body: JSON.stringify({ documentId: job.documentId }),
   });
   const snapshot = (await created.json()) as Snapshot;
 
@@ -453,7 +445,7 @@ test('再試行は 202、知らないブロックは 404', async (t) => {
   const created = await call('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'm1' }),
+    body: JSON.stringify({ documentId: job.documentId }),
   });
   const snapshot = (await created.json()) as Snapshot;
 
@@ -479,7 +471,7 @@ test('キャッシュ削除は世代を上げ、実行中の結果で復活さ�
   const created = await call('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'm1' }),
+    body: JSON.stringify({ documentId: job.documentId }),
   });
   const snapshot = (await created.json()) as Snapshot;
 
@@ -569,212 +561,273 @@ function rawStatus(
   });
 }
 
-// ---- API キー -------------------------------------------------------------
+// ---- 接続 -----------------------------------------------------------------
 
 const CANARY = 'sk-canary-0123456789abcdef';
 
-/** 覚えているだけの鍵置き場。DPAPI を使わずに API の契約だけを見る。 */
-function fakeCloudKey(initial = '') {
-  let value = initial;
-  const control: CloudKeyControl = {
-    target: 'api.openai.com',
-    configured: () => Promise.resolve(value !== ''),
-    set: (next) => {
-      value = next;
+const LOCAL_VIEW = {
+  name: 'local',
+  provider: 'ollama' as const,
+  baseUrl: 'http://127.0.0.1:11434',
+  model: 'm1',
+  trust: 'loopback' as const,
+};
+
+const CLOUD_VIEW = {
+  name: 'cloud',
+  provider: 'openai' as const,
+  baseUrl: 'https://api.openai.com/v1',
+  model: 'gpt-test',
+  trust: 'cloud-allowed' as const,
+};
+
+type FakeEntry = typeof LOCAL_VIEW | typeof CLOUD_VIEW;
+
+/** 覚えているだけの接続置き場。DPAPI を使わずに API の契約だけを見る。 */
+function fakeConnections() {
+  const keys = new Map<string, string>();
+  let entries: FakeEntry[] = [{ ...LOCAL_VIEW }];
+  let selected = 'local';
+
+  const view = (entry: FakeEntry) => ({
+    name: entry.name,
+    provider: entry.provider,
+    target: new URL(entry.baseUrl).host,
+    model: entry.model,
+    trust: entry.trust,
+    configured: (keys.get(entry.name) ?? '') !== '',
+  });
+
+  const control: ConnectionControl = {
+    list: () => Promise.resolve({ selected, connections: entries.map(view) }),
+    add: (input, apiKey) => {
+      entries = [...entries, input as unknown as FakeEntry];
+      if (typeof apiKey === 'string') keys.set(String(input.name), apiKey);
       return Promise.resolve();
     },
-    clear: () => {
-      value = '';
+    update: (name, input, apiKey) => {
+      entries = entries.map((entry) =>
+        entry.name === name ? (input as unknown as FakeEntry) : entry,
+      );
+      if (apiKey === null) keys.delete(name);
+      if (typeof apiKey === 'string') keys.set(name, apiKey);
       return Promise.resolve();
     },
-  };
-  return {
-    control,
-    get value() {
-      return value;
+    remove: (name) => {
+      entries = entries.filter((entry) => entry.name !== name);
+      keys.delete(name);
+      if (!entries.some((entry) => entry.name === selected)) selected = entries[0].name;
+      return Promise.resolve();
+    },
+    select: (name) => {
+      if (!entries.some((entry) => entry.name === name)) {
+        return Promise.reject(new ConnectionError('unknown-connection', 'その接続はありません'));
+      }
+      selected = name;
+      return Promise.resolve();
+    },
+    test: (name) => Promise.resolve({ ok: keys.has(name), detail: `${name} を試しました` }),
+    resolveSelected: () => {
+      const entry = entries.find((candidate) => candidate.name === selected) ?? entries[0];
+      const apiKey = keys.get(entry.name) ?? '';
+      return Promise.resolve({
+        name: entry.name,
+        model: entry.model,
+        connection:
+          entry.provider === 'ollama'
+            ? ({
+                kind: 'ollama',
+                endpoint: entry.baseUrl,
+                think: false,
+                temperature: 0.2,
+                timeoutMs: 1000,
+              } as ProviderConnection)
+            : ({
+                kind: 'openai',
+                baseUrl: entry.baseUrl,
+                apiKey,
+                temperature: 0.2,
+                timeoutMs: 1000,
+              } as ProviderConnection),
+      });
     },
   };
+  return { control, keys };
 }
 
-async function startCloudServer(
-  t: { after: (fn: () => unknown) => void },
-  options: { initialKey?: string } = {},
-) {
-  const key = fakeCloudKey(options.initialKey ?? '');
-  const seen: ProviderConnection[] = [];
-  const started = await startServer(t, {
-    cloudKey: key.control,
-    resolveConnection: () =>
-      Promise.resolve({
-        kind: 'openai',
-        baseUrl: 'https://api.openai.com/v1',
-        apiKey: key.value,
-        temperature: 0.2,
-        timeoutMs: 1000,
-      }),
-    translate: (block, config) => {
-      seen.push(config);
-      return Promise.resolve(`訳: ${block.source}`);
-    },
-  });
-  return { ...started, key, seen };
-}
+test('接続の一覧は鍵を載せず、選択中を返す', async (t) => {
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
 
-test('鍵の状態は登録の有無だけを返す', async (t) => {
-  const { call, key } = await startCloudServer(t);
-
-  const before = await call('/api/settings/api-key');
-  assert.equal(before.status, 200);
-  assert.deepEqual(await before.json(), {
+  const response = await call('/api/connections');
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as {
+    selected: string;
+    connections: Record<string, unknown>[];
+  };
+  assert.equal(body.selected, 'local');
+  assert.deepEqual(body.connections[0], {
+    name: 'local',
+    provider: 'ollama',
+    target: '127.0.0.1:11434',
+    model: 'm1',
+    trust: 'loopback',
     configured: false,
-    cloud: true,
-    target: 'api.openai.com',
-  });
-
-  const put = await call('/api/settings/api-key', {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ apiKey: CANARY }),
-  });
-  assert.equal(put.status, 200);
-  assert.equal((await put.text()).includes(CANARY), false, '応答に鍵を返さない');
-  assert.equal(key.value, CANARY);
-
-  const after = await call('/api/settings/api-key');
-  assert.deepEqual(await after.json(), {
-    configured: true,
-    cloud: true,
-    target: 'api.openai.com',
-  });
-
-  const removed = await call('/api/settings/api-key', { method: 'DELETE' });
-  assert.equal(removed.status, 200);
-  assert.equal(key.value, '');
-  assert.deepEqual(await (await call('/api/settings/api-key')).json(), {
-    configured: false,
-    cloud: true,
-    target: 'api.openai.com',
   });
 });
 
-test('空白だけの API キーは 400', async (t) => {
-  const { call, key } = await startCloudServer(t);
-  const response = await call('/api/settings/api-key', {
-    method: 'PUT',
+test('接続を追加すると鍵は保存されるが応答に出ない', async (t) => {
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
+
+  const response = await call('/api/connections', {
+    method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ apiKey: '   ' }),
+    body: JSON.stringify({ ...CLOUD_VIEW, apiKey: CANARY }),
   });
-  assert.equal(response.status, 400);
-  assert.equal(key.value, '');
+  assert.equal(response.status, 200);
+  assert.equal((await response.text()).includes(CANARY), false);
+  assert.equal(connections.keys.get('cloud'), CANARY);
 });
 
-test('改行や制御文字を含む API キーは 400', async (t) => {
-  const { call, key } = await startCloudServer(t);
-  for (const bad of ['sk-a\nb', 'sk-a\r\nHost: evil', 'sk-a b']) {
-    const response = await call('/api/settings/api-key', {
-      method: 'PUT',
+test('制御文字を含む鍵は 400', async (t) => {
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
+  for (const bad of ['sk-a\nb', 'sk-a\r\nHost: evil']) {
+    const response = await call('/api/connections', {
+      method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ apiKey: bad }),
+      body: JSON.stringify({ ...CLOUD_VIEW, apiKey: bad }),
     });
     assert.equal(response.status, 400, bad);
     const body = (await response.json()) as { error: { message: string } };
-    assert.equal(body.error.message.includes('sk-a'), false, '拒否した値を返さない');
+    assert.equal(body.error.message.includes('sk-a'), false);
   }
-  assert.equal(key.value, '');
+  assert.equal(connections.keys.size, 0);
 });
 
-test('apiKey の無い body は 400', async (t) => {
-  const { call } = await startCloudServer(t);
-  const response = await call('/api/settings/api-key', {
-    method: 'PUT',
+test('空白だけの鍵は 400', async (t) => {
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
+  const response = await call('/api/connections', {
+    method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ key: CANARY }),
+    body: JSON.stringify({ ...CLOUD_VIEW, apiKey: '   ' }),
   });
   assert.equal(response.status, 400);
 });
 
-test('ローカル provider では鍵欄を出さず、登録もさせない', async (t) => {
-  const { call } = await startServer(t);
-  const status = await call('/api/settings/api-key');
-  assert.deepEqual(await status.json(), { configured: false, cloud: false, target: '' });
+test('選択を切り替えられ、知らない名前は 404', async (t) => {
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
+  await call('/api/connections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...CLOUD_VIEW, apiKey: CANARY }),
+  });
 
-  const put = await call('/api/settings/api-key', {
+  const ok = await call('/api/connections/selected', {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ apiKey: CANARY }),
+    body: JSON.stringify({ name: 'cloud' }),
   });
-  assert.equal(put.status, 409);
-  const removed = await call('/api/settings/api-key', { method: 'DELETE' });
-  assert.equal(removed.status, 409);
+  assert.equal(ok.status, 200);
+  assert.equal(((await ok.json()) as { selected: string }).selected, 'cloud');
+
+  const missing = await call('/api/connections/selected', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: '居ない' }),
+  });
+  assert.equal(missing.status, 404);
+});
+
+test('接続テストは保存済みの名前に対してだけ動く', async (t) => {
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
+  const response = await call('/api/connections/local/test', { method: 'POST' });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { ok: boolean; detail: string };
+  assert.equal(body.ok, false);
+  assert.equal(body.detail.includes(CANARY), false);
+});
+
+test('名前は URL へ符号化して渡せる', async (t) => {
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
+  await call('/api/connections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...CLOUD_VIEW, name: '社内 / 検証' }),
+  });
+  const response = await call(`/api/connections/${encodeURIComponent('社内 / 検証')}`, {
+    method: 'DELETE',
+  });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { connections: { name: string }[] };
+  assert.deepEqual(
+    body.connections.map((connection) => connection.name),
+    ['local'],
+  );
+});
+
+test('鍵 API は無くなっている', async (t) => {
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
+  assert.equal((await call('/api/settings/api-key')).status, 404);
 });
 
 test('鍵が未登録ならセッションを作れない', async (t) => {
-  const { call } = await startCloudServer(t);
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
+  await call('/api/connections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...CLOUD_VIEW }),
+  });
+  await call('/api/connections/selected', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'cloud' }),
+  });
+
   const job = await uploadPdf(call);
   await waitForDocument(call, job.documentId, ['ready']);
   const response = await call('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'gpt-test' }),
+    body: JSON.stringify({ documentId: job.documentId }),
   });
   assert.equal(response.status, 409);
-  const body = (await response.json()) as { error: { code: string } };
-  assert.equal(body.error.code, 'no-api-key');
-});
-
-// Mutation: 起動時の接続を使い回すと失敗する。
-test('登録した鍵はセッション作成時に読み直す', async (t) => {
-  const { call, seen } = await startCloudServer(t);
-  const job = await uploadPdf(call);
-  await waitForDocument(call, job.documentId, ['ready']);
-
-  const refused = await call('/api/sessions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'gpt-test' }),
-  });
-  assert.equal(refused.status, 409);
-
-  await call('/api/settings/api-key', {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ apiKey: CANARY }),
-  });
-
-  const created = await call('/api/sessions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'gpt-test' }),
-  });
-  assert.equal(created.status, 201, '再起動せずに翻訳できる');
-
-  const snapshot = (await created.json()) as Snapshot;
-  assert.equal(JSON.stringify(snapshot).includes(CANARY), false);
-
-  for (let attempt = 0; attempt < 200 && seen.length === 0; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  assert.ok(seen.length > 0, '翻訳が始まる');
-  for (const config of seen) {
-    if (config.kind === 'ollama') throw new Error('クラウド接続で解決されるべき');
-    assert.equal(config.apiKey, CANARY, '登録した鍵が翻訳まで届く');
-  }
+  assert.equal(((await response.json()) as { error: { code: string } }).error.code, 'no-api-key');
 });
 
 // Mutation: 鍵を状態応答やセッションへ載せると失敗する。
 test('鍵は登録後もどの応答にも現れない', async (t) => {
-  const { call } = await startCloudServer(t, { initialKey: CANARY });
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
+  await call('/api/connections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...CLOUD_VIEW, apiKey: CANARY }),
+  });
+  await call('/api/connections/selected', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'cloud' }),
+  });
+
   const job = await uploadPdf(call);
   await waitForDocument(call, job.documentId, ['ready']);
   const created = await call('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ documentId: job.documentId, model: 'gpt-test' }),
+    body: JSON.stringify({ documentId: job.documentId }),
   });
   const snapshot = (await created.json()) as Snapshot;
 
   const bodies = [
-    await (await call('/api/settings/api-key')).text(),
+    await (await call('/api/connections')).text(),
     await (await call(`/api/documents/${job.documentId}`)).text(),
     await (
       await call(`/api/sessions/${snapshot.sessionId}`, {
@@ -786,4 +839,58 @@ test('鍵は登録後もどの応答にも現れない', async (t) => {
     await (await call('/')).text(),
   ];
   for (const body of bodies) assert.equal(body.includes(CANARY), false);
+});
+
+// Mutation: 選択の切り替えを開いているセッションへ配らないと失敗する。
+test('接続を切り替えると、開いているセッションがその場で訳し直す', async (t) => {
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
+  await call('/api/connections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...CLOUD_VIEW, apiKey: CANARY }),
+  });
+
+  const job = await uploadPdf(call);
+  await waitForDocument(call, job.documentId, ['ready']);
+  const created = await call('/api/sessions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ documentId: job.documentId }),
+  });
+  const before = (await created.json()) as Snapshot;
+  assert.equal(before.cloud, false);
+  assert.equal(before.connection, 'local');
+
+  await call('/api/connections/selected', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'cloud' }),
+  });
+
+  const patched = await call(`/api/sessions/${before.sessionId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ page: 1 }),
+  });
+  const after = (await patched.json()) as Snapshot;
+  assert.equal(after.connection, 'cloud');
+  assert.equal(after.cloud, true);
+  assert.equal(after.model, 'gpt-test');
+  assert.ok(after.generation > before.generation, '世代が上がる');
+  assert.equal(JSON.stringify(after).includes(CANARY), false);
+});
+
+test('セッション作成で model を送っても無視する', async (t) => {
+  const connections = fakeConnections();
+  const { call } = await startServer(t, { connections: connections.control });
+  const job = await uploadPdf(call);
+  await waitForDocument(call, job.documentId, ['ready']);
+  const created = await call('/api/sessions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ documentId: job.documentId, model: 'ignored' }),
+  });
+  assert.equal(created.status, 201);
+  assert.equal(((await created.json()) as Snapshot).model, 'm1');
 });

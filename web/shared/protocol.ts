@@ -35,13 +35,11 @@ export interface DocumentStatus {
 
 export interface CreateSessionRequest {
   documentId: string;
-  model: string;
 }
 
 export interface PatchSessionRequest {
   page?: number;
   paused?: boolean;
-  model?: string;
 }
 
 export interface RetryRequest {
@@ -57,6 +55,8 @@ export interface Snapshot {
   generation: number;
   page: number;
   paused: boolean;
+  /** 選択中の接続名。どこへ送っているかを画面で言うために使う。 */
+  connection: string;
   model: string;
   /** 送信先のホスト名。鍵もパスも含めない。 */
   target: string;
@@ -112,10 +112,8 @@ export function parsePageNumber(value: unknown, where = 'page'): number {
 
 export function parseCreateSessionRequest(input: unknown): CreateSessionRequest {
   const raw = asRecord(input, 'session 要求');
-  return {
-    documentId: asName(raw.documentId, 'documentId'),
-    model: asName(raw.model, 'model'),
-  };
+  // model は受け取らない。どのモデルを使うかは、選択中の接続が決める。
+  return { documentId: asName(raw.documentId, 'documentId') };
 }
 
 export function parsePatchSessionRequest(input: unknown): PatchSessionRequest {
@@ -126,7 +124,6 @@ export function parsePatchSessionRequest(input: unknown): PatchSessionRequest {
     if (typeof raw.paused !== 'boolean') fail('invalid-body', 'paused が真偽値ではありません');
     patch.paused = raw.paused;
   }
-  if (raw.model !== undefined) patch.model = asName(raw.model, 'model');
   if (Object.keys(patch).length === 0) fail('invalid-body', '更新する項目がありません');
   return patch;
 }

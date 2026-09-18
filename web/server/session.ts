@@ -42,6 +42,8 @@ export interface SessionOptions {
   documentId: string;
   documentHash: string;
   document: PdfDocument;
+  /** 接続名。表示にだけ使う。 */
+  connectionName: string;
   model: string;
   storage: Storage;
   scheduler: Scheduler;
@@ -77,6 +79,7 @@ export class Session {
 
   #document: PdfDocument;
   #documentHash: string;
+  #connectionName: string;
   #model: string;
   #storage: Storage;
   #scheduler: Scheduler;
@@ -96,6 +99,7 @@ export class Session {
     this.documentId = options.documentId;
     this.#document = options.document;
     this.#documentHash = options.documentHash;
+    this.#connectionName = options.connectionName;
     this.#model = options.model;
     this.#storage = options.storage;
     this.#scheduler = options.scheduler;
@@ -134,6 +138,7 @@ export class Session {
       generation: this.#generation,
       page: this.#page,
       paused: this.#paused,
+      connection: this.#connectionName,
       model: this.#model,
       target: describeTarget({ ...this.#provider, model: this.#model }),
       cloud: this.#provider.kind !== 'ollama',
@@ -194,10 +199,22 @@ export class Session {
     this.#scheduler.resume(this.sessionId);
   }
 
-  /** モデルを変えると訳し直す。キャッシュ検索も鍵が変わるのでやり直しになる。 */
-  setModel(model: string): void {
-    if (this.#closed || model === this.#model) return;
+  /**
+   * 送信先かモデルを変えると訳し直す。キャッシュ検索も鍵が変わるのでやり直しになる。
+   *
+   * 実行中の翻訳は打ち切る。切り替えたのに古い送信先へ送り続けることがないよう、
+   * ここが唯一の差し替え口である。
+   */
+  setConnection(connection: ProviderConnection, model: string, name: string): void {
+    if (this.#closed) return;
+    const same =
+      model === this.#model &&
+      name === this.#connectionName &&
+      JSON.stringify(connection) === JSON.stringify(this.#provider);
+    if (same) return;
+    this.#provider = connection;
     this.#model = model;
+    this.#connectionName = name;
     this.#invalidate();
   }
 

@@ -43,7 +43,7 @@ test('保存待ち中のモデル変更で旧訳を新しい世代へ公開し�
   storage.writeJson = async (key, value) => { entered(); await gate; await write(key, value); };
   session.start();
   await started;
-  session.setModel('m2');
+  session.setConnection(connection, 'm2', 'local');
   const generation = session.generation;
   release();
   await scheduler.idle();
@@ -98,6 +98,7 @@ async function setup(
     documentId: 'd1',
     documentHash: HASH,
     document: document(blocks),
+    connectionName: 'local',
     model,
     storage,
     scheduler,
@@ -319,7 +320,7 @@ test('モデルを変えるとキャッシュ検索からやり直す', async (t
   await scheduler.idle();
   const generation = session.generation;
 
-  session.setModel('m2');
+  session.setConnection(connection, 'm2', 'local');
   await scheduler.idle();
 
   assert.deepEqual(models, ['m1', 'm2']);
@@ -452,7 +453,7 @@ test('世代が変わった後に返ってきた訳はキャッシュにも表�
   session.start();
   await waitUntil(() => call === 1, '1 回目の翻訳が始まる');
 
-  session.setModel('m2');
+  session.setConnection(connection, 'm2', 'local');
   release('遅れて届いた古い訳');
   await scheduler.idle();
 
@@ -520,6 +521,7 @@ test('二つのタブでも翻訳は一度に一つ', async (t) => {
         documentId: 'd1',
         documentHash: HASH,
         document: document([block('b0', 0, 1), block('b1', 1, 1)]),
+        connectionName: 'local',
         model: 'm1',
         storage,
         scheduler,
@@ -534,4 +536,78 @@ test('二つのタブでも翻訳は一度に一つ', async (t) => {
   for (const session of sessions) await session.close();
   scheduler.close();
   await storage.close();
+});
+
+// ---- 接続の切り替え -------------------------------------------------------
+
+const CLOUD: ProviderConnection = {
+  kind: 'openai',
+  baseUrl: 'https://api.openai.com/v1',
+  apiKey: 'sk-canary-0123456789abcdef',
+  temperature: 0.2,
+  timeoutMs: 1000,
+};
+
+// Mutation: 切り替えで世代を上げないと失敗する。
+test('接続を切り替えると世代が上がり、新しい送信先で訳す', async (t) => {
+  const seen: ProviderConfig[] = [];
+  const { session, scheduler } = await setup(t, [block('b0', 0, 1)], async (_block, config) => {
+    seen.push(config);
+    return '訳';
+  });
+  session.start();
+  await scheduler.idle();
+  const before = session.generation;
+
+  session.setConnection(CLOUD, 'gpt-test', 'cloud');
+  await scheduler.idle();
+
+  assert.ok(session.generation > before, '世代が上がる');
+  assert.equal(session.snapshot().cloud, true);
+  assert.equal(session.snapshot().target, 'api.openai.com');
+  assert.equal(session.snapshot().model, 'gpt-test');
+  assert.equal(session.snapshot().connection, 'cloud');
+  assert.ok(
+    seen.some((config) => config.kind === 'openai'),
+    '新しい送信先で訳す',
+  );
+});
+
+// Mutation: 古い接続への送信を止めないと失敗する。
+test('切り替えると、古い接続への実行中の翻訳は打ち切られる', async (t) => {
+  let aborted = 0;
+  const { session } = await setup(
+    t,
+    [block('b0', 0, 1)],
+    (_block, _config, signal) =>
+      new Promise<string>((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          aborted += 1;
+          reject(new Error('中断'));
+        });
+      }),
+  );
+  session.start();
+  await waitUntil(() => stateOf(session, 'b0').status === 'translating', '翻訳が始まる');
+
+  session.setConnection(CLOUD, 'gpt-test', 'cloud');
+
+  // idle() は待たない。切り替えで訳し直しが始まり、この偽 translate は
+  // 打ち切られるまで解決しないので、待つと永久に返らない。
+  await waitUntil(() => aborted > 0, '古い送信先への要求が打ち切られる');
+
+  assert.equal(session.snapshot().connection, 'cloud');
+  await session.close();
+});
+
+// Mutation: 同一判定を外すと、選び直しのたびに訳し直して失敗する。
+test('同じ接続と同じモデルなら何もしない', async (t) => {
+  const { session, scheduler } = await setup(t, [block('b0', 0, 1)], async () => '訳');
+  session.start();
+  await scheduler.idle();
+  const before = session.generation;
+
+  session.setConnection(connection, 'm1', 'local');
+
+  assert.equal(session.generation, before);
 });

@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 import { DocumentStore } from '../../web/server/documents';
 import type { Extractor } from '../../web/server/extractor';
-import { createApp, type CloudKeyControl } from '../../web/server/http';
+import { createApp, type ConnectionControl } from '../../web/server/http';
 import { Scheduler } from '../../web/server/scheduler';
 import { allowedHostsFor, createToken } from '../../web/server/security';
 import type { ProviderConnection, TranslateFn } from '../../web/server/session';
@@ -63,46 +63,101 @@ const fixedTranslate: TranslateFn = async (block) => {
 };
 
 /**
- * `PDF_JA_E2E_CLOUD=1` ならクラウド構成として振る舞う。
+ * `PDF_JA_E2E_CLOUD=1` ならクラウドの接続も登録した状態で立ち上げる。
  *
  * 鍵は覚えておくだけで、翻訳は `fixedTranslate` が返す。外へは 1 バイトも出ない。
- * 画面から鍵を登録して訳し始められることを、実 HTTP と実画面で確かめるための口。
+ * 画面から接続を切り替えられることを、実 HTTP と実画面で確かめるための口。
  */
 const cloud = process.env.PDF_JA_E2E_CLOUD === '1';
 
-const LOCAL: ProviderConnection = {
-  kind: 'ollama',
-  endpoint: 'http://127.0.0.1:11434',
-  think: false,
-  temperature: 0.2,
-  timeoutMs: 5000,
-};
-
-let storedKey = '';
-
-const cloudKey: CloudKeyControl = {
-  target: 'api.openai.com',
-  configured: () => Promise.resolve(storedKey !== ''),
-  set: (value) => {
-    storedKey = value;
-    return Promise.resolve();
-  },
-  clear: () => {
-    storedKey = '';
-    return Promise.resolve();
-  },
-};
-
-function resolveConnection(): Promise<ProviderConnection> {
-  if (!cloud) return Promise.resolve(LOCAL);
-  return Promise.resolve({
-    kind: 'openai',
-    baseUrl: 'https://api.openai.com/v1',
-    apiKey: storedKey,
-    temperature: 0.2,
-    timeoutMs: 5000,
-  });
+interface FixtureConnection {
+  name: string;
+  provider: 'ollama' | 'openai';
+  baseUrl: string;
+  model: string;
+  trust: 'loopback' | 'cloud-allowed';
 }
+
+const LOCAL: FixtureConnection = {
+  name: 'local',
+  provider: 'ollama',
+  baseUrl: 'http://127.0.0.1:11434',
+  model: 'fixture-model',
+  trust: 'loopback',
+};
+
+const CLOUD: FixtureConnection = {
+  name: 'cloud',
+  provider: 'openai',
+  baseUrl: 'https://api.openai.com/v1',
+  model: 'fixture-cloud-model',
+  trust: 'cloud-allowed',
+};
+
+let entries: FixtureConnection[] = cloud ? [LOCAL, CLOUD] : [LOCAL];
+let selected = 'local';
+const keys = new Map<string, string>();
+
+const view = (entry: FixtureConnection) => ({
+  name: entry.name,
+  provider: entry.provider,
+  target: new URL(entry.baseUrl).host,
+  model: entry.model,
+  trust: entry.trust,
+  configured: (keys.get(entry.name) ?? '') !== '',
+});
+
+const connections: ConnectionControl = {
+  list: () => Promise.resolve({ selected, connections: entries.map(view) }),
+  add: (input, apiKey) => {
+    entries = [...entries, input as unknown as FixtureConnection];
+    if (typeof apiKey === 'string') keys.set(String(input.name), apiKey);
+    return Promise.resolve();
+  },
+  update: (name, input, apiKey) => {
+    entries = entries.map((entry) =>
+      entry.name === name ? (input as unknown as FixtureConnection) : entry,
+    );
+    if (apiKey === null) keys.delete(name);
+    if (typeof apiKey === 'string') keys.set(name, apiKey);
+    return Promise.resolve();
+  },
+  remove: (name) => {
+    entries = entries.filter((entry) => entry.name !== name);
+    keys.delete(name);
+    if (!entries.some((entry) => entry.name === selected)) selected = entries[0].name;
+    return Promise.resolve();
+  },
+  select: (name) => {
+    selected = name;
+    return Promise.resolve();
+  },
+  test: (name) => Promise.resolve({ ok: keys.has(name), detail: `${name} を試しました` }),
+  resolveSelected: () => {
+    const entry = entries.find((candidate) => candidate.name === selected) ?? entries[0];
+    const apiKey = keys.get(entry.name) ?? '';
+    return Promise.resolve({
+      name: entry.name,
+      model: entry.model,
+      connection:
+        entry.provider === 'ollama'
+          ? ({
+              kind: 'ollama',
+              endpoint: entry.baseUrl,
+              think: false,
+              temperature: 0.2,
+              timeoutMs: 5000,
+            } as ProviderConnection)
+          : ({
+              kind: 'openai',
+              baseUrl: entry.baseUrl,
+              apiKey,
+              temperature: 0.2,
+              timeoutMs: 5000,
+            } as ProviderConnection),
+    });
+  },
+};
 
 async function main(): Promise<void> {
   const port = Number(process.argv[2] ?? '7398');
@@ -120,8 +175,7 @@ async function main(): Promise<void> {
     documents,
     storage,
     scheduler,
-    resolveConnection,
-    cloudKey: cloud ? cloudKey : undefined,
+    connections,
     defaultModel: 'fixture-model',
     staticRoot: join(root, 'dist-web'),
     security: { token: createToken(), allowedHosts },

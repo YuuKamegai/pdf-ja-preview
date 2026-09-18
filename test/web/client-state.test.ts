@@ -27,6 +27,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     generation: 2,
     page: 1,
     paused: false,
+    connection: 'local',
     model: 'm1',
     target: '127.0.0.1:11434',
     cloud: false,
