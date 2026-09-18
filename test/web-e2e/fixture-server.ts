@@ -18,6 +18,7 @@ import { Scheduler } from '../../web/server/scheduler';
 import { allowedHostsFor, createToken } from '../../web/server/security';
 import type { ProviderConnection, TranslateFn } from '../../web/server/session';
 import { Storage } from '../../web/server/storage';
+import { TranslationError } from '../../web/server/translation';
 import { parseDocument, type PdfDocument } from '../../web/shared/document';
 
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -59,6 +60,15 @@ const fixedTranslate: TranslateFn = async (block) => {
   if (block.source.startsWith('Figure caption.')) return '図の説明。3 回の試行の中央値。';
   if (block.source.startsWith('Title:')) return '表題: 低温保存後の代謝物シグナルの回復';
   if (block.source.startsWith('FAIL')) throw new Error('わざと失敗させた訳');
+  // 検証に落ちた訳の見せ方を確かめる口。`42.5` を落とした、もっともらしい訳を持たせる。
+  // 数値を取り逃がした訳ほど危ないので、原文と並べて読めることを画面で確かめる。
+  if (block.source.startsWith('Here C is the concentration')) {
+    throw new TranslationError(
+      'number-missing',
+      '数値が訳文から落ちています: 42.5',
+      'ここで C は濃度、t は秒単位の時間である。活性化エネルギー Ea はどの試行でも kJ/mol であった。',
+    );
+  }
   return `訳: ${block.source}`;
 };
 

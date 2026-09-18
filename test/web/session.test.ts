@@ -372,6 +372,74 @@ test('失敗は原文へ戻し、理由を残してイベントを出す', async
   assert.ok(events.some((event) => event.type === 'error' && event.code === 'number-missing'));
 });
 
+test('失敗しても、検証に落ちた訳は状態に残す', async (t) => {
+  const failing: TranslateFn = async () => {
+    throw new TranslationError(
+      'number-missing',
+      '数値が訳文から落ちています: 25',
+      '試料を 10 分保持した。',
+    );
+  };
+  const blocks = [block('b0', 0, 1)];
+  const { session, scheduler, storage } = await setup(t, blocks, failing);
+
+  session.start();
+  await scheduler.idle();
+
+  const state = stateOf(session, 'b0');
+  assert.equal(state.status, 'error');
+  assert.equal(state.ja, undefined, '確定した訳としては出さない');
+  assert.equal(state.draft, '試料を 10 分保持した。');
+
+  const cached = await storage.readJson(
+    translationCacheKey(
+      HASH,
+      translationKey({
+        source: blocks[0].source,
+        headingContext: blocks[0].headingContext,
+        model: 'm1',
+        think: false,
+        temperature: 0.2,
+        promptVersion: PDF_PROMPT_VERSION,
+        verifierVersion: PDF_VERIFIER_VERSION,
+      }),
+    ),
+  );
+  assert.equal(cached, undefined, '未検証の訳はキャッシュへ入れない');
+});
+
+test('載せる訳が無い失敗では draft を持たせない', async (t) => {
+  const failing: TranslateFn = async () => {
+    throw new TranslationError('empty-translation', '訳文が空です');
+  };
+  const { session, scheduler } = await setup(t, [block('b0', 0, 1)], failing);
+
+  session.start();
+  await scheduler.idle();
+
+  assert.equal(stateOf(session, 'b0').draft, undefined);
+});
+
+test('訳し直すと前回の未検証の訳は消える', async (t) => {
+  let call = 0;
+  const failing: TranslateFn = async () => {
+    call += 1;
+    if (call === 1) throw new TranslationError('number-missing', '数値が落ちた', '古い未検証の訳');
+    return '訳: Source of b0.';
+  };
+  const { session, scheduler } = await setup(t, [block('b0', 0, 1)], failing);
+
+  session.start();
+  await scheduler.idle();
+  assert.equal(stateOf(session, 'b0').draft, '古い未検証の訳');
+
+  session.retry('b0', true);
+  await scheduler.idle();
+  const state = stateOf(session, 'b0');
+  assert.equal(state.status, 'translated');
+  assert.equal(state.draft, undefined);
+});
+
 test('中断は失敗にせず待機へ戻す', async (t) => {
   const blocked: TranslateFn = (b, config, signal) =>
     new Promise((_resolve, reject) => {

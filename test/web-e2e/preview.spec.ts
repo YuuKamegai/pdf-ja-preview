@@ -99,6 +99,21 @@ test('ページ装飾は折りたたんで出す', async ({ page }) => {
   expect(await furniture.evaluate((el) => el.tagName)).toBe('DETAILS');
 });
 
+test('検証に落ちた訳も、未検証と断って原文と並べて出す', async ({ page }) => {
+  await openWithSession(page, 'formula.pdf', 'texts-4');
+
+  await expect(page.getByTestId('status-texts-4')).toHaveText('失敗');
+  await expect(page.getByTestId('error-texts-4')).toContainText('42.5');
+
+  const draft = page.getByTestId('draft-texts-4');
+  await expect(draft).toContainText('未検証');
+  await expect(draft).toContainText('活性化エネルギー Ea はどの試行でも kJ/mol');
+
+  // 突き合わせられるよう、原文と訳し直すはそのまま残す。
+  await expect(page.getByTestId('body-texts-4')).toContainText('42.5 kJ per mole');
+  await expect(page.getByTestId('retry-texts-4')).toBeVisible();
+});
+
 test('ページを移ると訳文もそのページに変わる', async ({ page }) => {
   await openWithSession(page, 'general.pdf', 'texts-1');
 

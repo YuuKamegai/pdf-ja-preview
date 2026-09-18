@@ -77,6 +77,13 @@ export interface TranslationState {
   sourceHash: string;
   status: BlockStatus;
   ja?: string;
+  /**
+   * 検査に落ちた訳文。`status` が `error` のときだけ載る。
+   *
+   * `ja` とは別にする。`ja` へ入れると「確定した訳」として扱うところが拾いうる。
+   * こちらはキャッシュへも入らず、読み直せば消える。
+   */
+  draft?: string;
   error?: { code: string; message: string };
 }
 

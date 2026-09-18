@@ -273,6 +273,25 @@ button:hover {
   color: #c0392b;
 }
 
+/* 検査に落ちた訳。確定した訳と見分けがつくよう、警告の枠に入れて出す。 */
+.block .draft {
+  margin: 0.2rem 0;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #c0392b;
+  border-radius: 4px;
+  background: color-mix(in srgb, #c0392b 6%, transparent);
+}
+
+.block .draft-label {
+  margin: 0 0 0.2rem;
+  font-size: 0.75rem;
+  color: #c0392b;
+}
+
+.block .draft .body {
+  margin: 0;
+}
+
 .crop {
   margin: 0.3rem 0;
 }

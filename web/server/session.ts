@@ -327,12 +327,17 @@ export class Session {
         }
         const code = error instanceof TranslationError ? error.code : 'translation-failed';
         const message = (error as Error).message;
-        this.#setState({
+        // 検査に落ちた訳は確定させないしキャッシュへも入れないが、状態には残す。
+        // 画面が「未検証の訳」として出し、読み手が原文と突き合わせられるようにする。
+        const draft = error instanceof TranslationError ? error.draft : undefined;
+        const next: TranslationState = {
           id: block.id,
           sourceHash,
           status: 'error',
           error: { code, message },
-        });
+        };
+        if (draft !== undefined) next.draft = draft;
+        this.#setState(next);
         this.#emit({
           type: 'error',
           sessionId: this.sessionId,

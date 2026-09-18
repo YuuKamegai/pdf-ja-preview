@@ -337,3 +337,110 @@ test('日付や章番号の区切りを負数と読まない', () => {
     ['1', '3', '2026', '09', '17'],
   );
 });
+
+// ---- 失敗した訳の持ち帰り -------------------------------------------------
+//
+// 失敗は失敗のまま確定させないが、訳文は捨てない。読み手が自分で原文と突き合わせ
+// られるよう、画面に「未検証の訳」として出すための材料を例外に載せて返す。
+
+test('検証に落ちた訳文を例外に載せて返す', async () => {
+  const { translate } = fakeTranslate(() => '⟦PT1⟧と⟦PT0⟧を見よ。');
+  const error = await translatePdfBlock(
+    block('See [1] and [2].'),
+    config,
+    new AbortController().signal,
+    { translate },
+  ).then(
+    () => undefined,
+    (thrown: unknown) => thrown,
+  );
+  assert.ok(error instanceof TranslationError);
+  assert.equal(error.code, 'citation-mismatch');
+  assert.equal(error.draft, '[2]と[1]を見よ。');
+});
+
+test('差し込み口が落ちても、戻せるところまで戻した訳を載せる', async () => {
+  const { translate } = fakeTranslate(() => '⟦PT0⟧ °C で保持した。');
+  const error = await translatePdfBlock(
+    block('Held at 25 °C for 10 min.'),
+    config,
+    new AbortController().signal,
+    { translate },
+  ).then(
+    () => undefined,
+    (thrown: unknown) => thrown,
+  );
+  assert.ok(error instanceof TranslationError);
+  assert.equal(error.code, 'placeholder-missing');
+  assert.equal(error.draft, '25 °C で保持した。');
+});
+
+test('知らない差し込み口はそのまま残して載せる', async () => {
+  const { translate } = fakeTranslate(() => '⟦PT0⟧ °C、⟦PT1⟧ 分、⟦PT99⟧。');
+  const error = await translatePdfBlock(
+    block('Held at 25 °C for 10 min.'),
+    config,
+    new AbortController().signal,
+    { translate },
+  ).then(
+    () => undefined,
+    (thrown: unknown) => thrown,
+  );
+  assert.ok(error instanceof TranslationError);
+  assert.equal(error.code, 'placeholder-unknown');
+  assert.equal(error.draft, '25 °C、10 分、⟦PT99⟧。');
+});
+
+test('途中のかたまりで落ちたら、そこまでの訳を載せて残りは訳さない', async () => {
+  const sentence = 'Each run took 5 min and produced 3 files. ';
+  const source = sentence.repeat(120);
+  const chunks = splitIntoChunks(source);
+  assert.ok(chunks.length > 2, '3 つ以上に分かれる原文で試す');
+  let call = 0;
+  const { translate, calls } = fakeTranslate((chunk) => {
+    call += 1;
+    return call === 2 ? '数を落とした訳' : chunk;
+  });
+  const error = await translatePdfBlock(block(source), config, new AbortController().signal, {
+    translate,
+  }).then(
+    () => undefined,
+    (thrown: unknown) => thrown,
+  );
+  assert.ok(error instanceof TranslationError);
+  assert.ok(error.draft?.startsWith(chunks[0]), '通ったかたまりはそのまま残る');
+  assert.match(error.draft ?? '', /数を落とした訳/);
+  assert.equal(calls.length, 2, '残りのかたまりはモデルへ送らない');
+});
+
+test('空の訳には載せるものが無い', async () => {
+  const { translate } = fakeTranslate(() => '   ');
+  const error = await translatePdfBlock(
+    block('Hello world.'),
+    config,
+    new AbortController().signal,
+    { translate },
+  ).then(
+    () => undefined,
+    (thrown: unknown) => thrown,
+  );
+  assert.ok(error instanceof TranslationError);
+  assert.equal(error.code, 'empty-translation');
+  assert.equal(error.draft, undefined);
+});
+
+test('接続が切れた例外には訳を載せない', async () => {
+  const { translate } = fakeTranslate(() => {
+    throw new Error('fetch failed');
+  });
+  const error = await translatePdfBlock(
+    block('Hello.'),
+    config,
+    new AbortController().signal,
+    { translate },
+  ).then(
+    () => undefined,
+    (thrown: unknown) => thrown,
+  );
+  assert.equal(error instanceof TranslationError, false);
+});

@@ -43,11 +43,19 @@ export type VerifyResult = VerifyOk | VerifyFailure;
 
 export class TranslationError extends Error {
   readonly code: string;
+  /**
+   * 検査に落ちた訳文。確定させてはいけないが、捨てもしない。
+   *
+   * 画面が「未検証の訳」として出し、読み手が原文と突き合わせられるようにする。
+   * 出すものが無いとき（訳が空、送信そのものが失敗）は `undefined`。
+   */
+  readonly draft: string | undefined;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, draft?: string) {
     super(message);
     this.name = 'TranslationError';
     this.code = code;
+    this.draft = draft;
   }
 }
 
@@ -218,6 +226,19 @@ export function protectSource(source: string): Protected {
   return { text: out, tokens };
 }
 
+/**
+ * 分かる差し込み口だけ戻す。知らないものは印のまま残す。
+ *
+ * 検査に落ちた訳を見せるためだけに使う。ここを通った文字列は確定させない。
+ */
+function restoreBestEffort(translated: string, tokens: ProtectedToken[]): string {
+  return translated.replace(/⟦PT(\d+)⟧/g, (marker, digits: string) => {
+    const index = Number(digits);
+    const known = Number.isInteger(index) && index >= 0 && index < tokens.length;
+    return known ? tokens[index].text : marker;
+  });
+}
+
 /** 返ってきた訳文のプレースホルダーを検査して戻す。 */
 export function restoreProtected(translated: string, tokens: ProtectedToken[]): string {
   const seen = new Map<number, number>();
@@ -237,6 +258,7 @@ export function restoreProtected(translated: string, tokens: ProtectedToken[]): 
     throw new TranslationError(
       'placeholder-unknown',
       `訳文に知らない差し込み口があります: ${unknown.slice(0, 3).join(', ')}`,
+      restoreBestEffort(translated, tokens),
     );
   }
 
@@ -246,12 +268,14 @@ export function restoreProtected(translated: string, tokens: ProtectedToken[]): 
       throw new TranslationError(
         'placeholder-missing',
         `訳文から「${tokens[index].text}」が落ちています`,
+        restoreBestEffort(translated, tokens),
       );
     }
     if (count > 1) {
       throw new TranslationError(
         'placeholder-duplicated',
         `訳文で「${tokens[index].text}」が ${count} 回に増えています`,
+        restoreBestEffort(translated, tokens),
       );
     }
   }
@@ -352,27 +376,28 @@ export async function translatePdfBlock(
       systemPrompt: PDF_SYSTEM_PROMPT,
     });
 
+    // 失敗したときに見せる訳。通ったかたまりの後ろに、落ちたかたまりを繋ぐ。
+    // 残りのかたまりは訳さない。失敗は失敗のままなので、送っても金と時間を使うだけ。
+    const draftOf = (text: string): string | undefined => {
+      const combined = results.join('') + leading + text + trailing;
+      return combined.trim() === '' ? undefined : combined;
+    };
+    const where = (message: string): string =>
+      chunks.length > 1 ? `${index + 1} 番目のかたまりで失敗しました: ${message}` : message;
+
     let restored: string;
     try {
       restored = restoreProtected(raw.trim(), tokens);
     } catch (error) {
-      if (error instanceof TranslationError && chunks.length > 1) {
-        throw new TranslationError(
-          error.code,
-          `${index + 1} 番目のかたまりで失敗しました: ${error.message}`,
-        );
+      if (error instanceof TranslationError) {
+        throw new TranslationError(error.code, where(error.message), draftOf(error.draft ?? ''));
       }
       throw error;
     }
 
     const verdict = verifyTranslation(core, restored);
     if (!verdict.ok) {
-      throw new TranslationError(
-        verdict.code,
-        chunks.length > 1
-          ? `${index + 1} 番目のかたまりで失敗しました: ${verdict.message}`
-          : verdict.message,
-      );
+      throw new TranslationError(verdict.code, where(verdict.message), draftOf(restored));
     }
     results.push(leading + restored + trailing);
   }

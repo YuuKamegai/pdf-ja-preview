@@ -154,7 +154,10 @@ export class TranslationView {
         event.stopPropagation();
         this.#handlers.onRetry(block.id);
       });
-      container.append(reason, retry);
+      container.append(reason);
+      // 訳が残っているなら見せる。確定はしないが、原文と突き合わせる助けにはなる。
+      if (state.draft) container.append(this.#renderDraft(block.id, state.draft));
+      container.append(retry);
     }
 
     container.addEventListener('click', () => this.#handlers.onSelect(block.id));
@@ -175,6 +178,27 @@ export class TranslationView {
       body.classList.add('source');
     }
     return body;
+  }
+
+  /**
+   * 検査に落ちた訳。確定していないと断ってから出す。
+   *
+   * 数値を取り逃がした訳ほど危ないので、確定した訳と同じ見た目にはしない。原文は
+   * 上に残したままなので、読み手が自分で突き合わせられる。
+   */
+  #renderDraft(blockId: string, draft: string): HTMLElement {
+    const section = globalThis.document.createElement('section');
+    section.className = 'draft';
+    section.dataset.testid = `draft-${blockId}`;
+    const label = globalThis.document.createElement('p');
+    label.className = 'draft-label';
+    label.textContent = '未検証の訳';
+    const body = globalThis.document.createElement('p');
+    body.className = 'body';
+    body.lang = 'ja';
+    body.textContent = draft;
+    section.append(label, body);
+    return section;
   }
 
   /** 図の中の文字。訳さないが、読めるように畳んで残す。 */
