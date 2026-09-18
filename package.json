@@ -34,14 +34,14 @@
       "properties": {
         "mdJaPreview.provider": {
           "type": "string",
-          "enum": ["ollama", "openai"],
+          "enum": ["ollama", "openai", "azure"],
           "default": "ollama",
-          "description": "翻訳に使う provider。openai は OpenAI 互換の endpoint を指します。"
+          "description": "翻訳に使う provider。azure は Azure OpenAI v1 の公式 endpoint と deployment 名を使います。"
         },
         "mdJaPreview.baseUrl": {
           "type": "string",
           "default": "https://api.openai.com/v1",
-          "description": "provider が openai のときの送信先。API キーはここに書かず、コマンドで登録します。"
+          "description": "provider が openai または azure のときの送信先。API キーはここに書かず、コマンドで登録します。"
         },
         "mdJaPreview.cloudAllowed": {
           "type": "boolean",
@@ -56,7 +56,7 @@
         "mdJaPreview.model": {
           "type": "string",
           "default": "qwen3.5:9b-q4_K_M",
-          "description": "翻訳に使う Ollama のモデル名。"
+          "description": "翻訳に使うモデル名。Azure では deployment 名を指定します。"
         },
         "mdJaPreview.think": {
           "type": "boolean",

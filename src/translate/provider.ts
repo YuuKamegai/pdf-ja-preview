@@ -15,7 +15,8 @@ import { translateWithOpenAi, type OpenAiConfig } from './openai';
 
 export type ProviderConfig =
   | ({ kind: 'ollama' } & OllamaConfig)
-  | ({ kind: 'openai' } & OpenAiConfig);
+  | ({ kind: 'openai' } & OpenAiConfig)
+  | ({ kind: 'azure' } & OpenAiConfig);
 
 export interface TranslateArgs {
   source: string;
@@ -43,6 +44,35 @@ export function isLoopbackUrl(raw: string): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '::1';
 }
 
+/** Azure OpenAI v1 の公式 endpoint だけを受け付け、末尾を /openai/v1 に揃える。 */
+export function normalizeAzureBaseUrl(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new ProviderConfigError('Azure OpenAI の送信先が URL ではありません。');
+  }
+  const officialHost =
+    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.(?:openai\.azure\.com|services\.ai\.azure\.com)$/i;
+  if (
+    url.protocol !== 'https:' ||
+    !officialHost.test(url.hostname) ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.search !== '' ||
+    url.hash !== ''
+  ) {
+    throw new ProviderConfigError(
+      'Azure OpenAI の送信先は公式 https endpoint だけを指定してください。',
+    );
+  }
+  const path = url.pathname.replace(/\/+$/, '');
+  if (path !== '' && path !== '/openai' && path !== '/openai/v1') {
+    throw new ProviderConfigError('Azure OpenAI の path は /openai/v1 だけを使用できます。');
+  }
+  return `${url.origin}/openai/v1`;
+}
+
 /**
  * 送ってよい設定かを確かめる。反していれば投げる。
  * 例外メッセージに API キーを含めないこと。
@@ -61,6 +91,7 @@ export function assertSendable(config: ProviderConfig, cloudAllowed: boolean): v
   }
 
   let url: URL;
+  if (config.kind === 'azure') normalizeAzureBaseUrl(config.baseUrl);
   try {
     url = new URL(config.baseUrl);
   } catch {
@@ -105,9 +136,17 @@ export async function translate(args: TranslateArgs): Promise<string> {
     onDelta: args.onDelta,
     systemPrompt: args.systemPrompt,
   };
-  if (config.kind === 'openai') {
+  if (config.kind === 'openai' || config.kind === 'azure') {
     const impl = deps?.openai ?? translateWithOpenAi;
-    return impl({ ...common, config });
+    const cloudConfig =
+      config.kind === 'azure'
+        ? {
+            ...config,
+            baseUrl: normalizeAzureBaseUrl(config.baseUrl),
+            authMode: 'api-key' as const,
+          }
+        : config;
+    return impl({ ...common, config: cloudConfig });
   }
   const impl = deps?.ollama ?? translateBlock;
   return impl({ ...common, config });

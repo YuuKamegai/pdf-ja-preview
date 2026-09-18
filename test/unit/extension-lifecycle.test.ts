@@ -168,6 +168,10 @@ const mocks: Record<string, string> = {
       var host = url.hostname.replace(/^\\[|\\]$/g, '');
       return host === 'localhost' || host === '127.0.0.1' || host === '::1';
     }
+    exports.normalizeAzureBaseUrl = function (raw) {
+      var url = new URL(raw);
+      return url.origin + '/openai/v1';
+    };
     exports.assertSendable = function (config, cloudAllowed) {
       if (config.kind === 'ollama') {
         if (!isLoopbackUrl(config.endpoint)) {
@@ -209,13 +213,13 @@ const mocks: Record<string, string> = {
 (globalThis as any).__mdJaFakePanel = FakePanel;
 (globalThis as any).__mdJaFakeSession = FakeSession;
 
-function context() {
+function context(secret?: string) {
   return {
     subscriptions: [],
     globalStorageUri: { fsPath: 'storage' },
     extensionUri: {},
     // 既定は ollama 設定なので、鍵が無くても assertSendable() を通る。
-    secrets: { async get() { return undefined; }, async store() {}, async delete() {} },
+    secrets: { async get() { return secret; }, async store() {}, async delete() {} },
   };
 }
 async function tick(): Promise<void> { await new Promise((resolve) => setImmediate(resolve)); }
@@ -227,6 +231,29 @@ test('ready 前のメッセージはパネル側で保持されるため session
   harness.loads[0].resolve();
   await running;
   assert.deepEqual(harness.sessions[0].opens, ['# A']);
+});
+
+test('Azure は SecretStorage の鍵を使いクラウド送信通知を出す', async () => {
+  harness.config = {
+    provider: 'azure',
+    baseUrl: 'https://sample.openai.azure.com/openai/v1',
+    model: 'translation-deployment',
+    cloudAllowed: true,
+  };
+  extension.activate(context('azure-key'));
+  const running = harness.commands.get('mdJaPreview.open')!();
+  await tick();
+  assert.equal(harness.loads.length, 1);
+  harness.loads[0].resolve();
+  await running;
+  assert.equal(harness.sessions.length, 1);
+  assert.ok(
+    harness.panels[0].messages.some(
+      (message: any) =>
+        message.kind === 'notice' && /sample\.openai\.azure\.com/.test(message.text),
+    ),
+  );
+  assert.equal(JSON.stringify(harness.panels[0].messages).includes('azure-key'), false);
 });
 
 test('cache load 中に閉じたパネルは load 完了後も session を開始しない', async () => {

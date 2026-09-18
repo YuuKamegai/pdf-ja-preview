@@ -15,10 +15,14 @@ function reader(values: Record<string, unknown>) {
  */
 function keysReadByResolveConfig(): Set<string> {
   const seen = new Set<string>();
-  for (const provider of ['ollama', 'openai']) {
+  for (const provider of ['ollama', 'openai', 'azure']) {
     resolveConfig((key) => {
       seen.add(key);
-      return key === 'provider' ? provider : undefined;
+      if (key === 'provider') return provider;
+      if (provider === 'azure' && key === 'baseUrl') {
+        return 'https://sample.openai.azure.com/openai/v1';
+      }
+      return undefined;
     });
   }
   return seen;
@@ -39,6 +43,21 @@ test('provider を openai にすると baseUrl 側を組む', () => {
   if (config.provider.kind !== 'openai') throw new Error('unreachable');
   assert.equal(config.provider.baseUrl, 'https://api.openai.com/v1');
   assert.equal(config.provider.model, 'gpt-test');
+});
+
+test('provider を azure にすると公式 endpoint を正規化して deployment 名を使う', () => {
+  const config = resolveConfig(
+    reader({
+      provider: 'azure',
+      baseUrl: 'https://sample.services.ai.azure.com/openai/',
+      model: 'translation-deployment',
+    }),
+  );
+  assert.equal(config.provider.kind, 'azure');
+  if (config.provider.kind !== 'azure') throw new Error('unreachable');
+  assert.equal(config.provider.baseUrl, 'https://sample.services.ai.azure.com/openai/v1');
+  assert.equal(config.provider.model, 'translation-deployment');
+  assert.equal(config.provider.apiKey, '');
 });
 
 test('鍵は設定から読まない（常に空）', () => {

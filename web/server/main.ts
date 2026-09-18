@@ -13,6 +13,7 @@ import { join, resolve } from 'node:path';
 import {
   assertSendable,
   describeTarget,
+  normalizeAzureBaseUrl,
   type ProviderConfig,
 } from '../../src/translate/provider';
 import { DocumentStore } from './documents';
@@ -79,8 +80,9 @@ export function readSettings(
   defaultStaticRoot = join(process.cwd(), 'dist-web'),
 ): ServerSettings {
   const python = env.PDF_JA_PYTHON ?? '';
-  const kind = env.PDF_JA_PROVIDER === 'openai' ? 'openai' : 'ollama';
-  const model = env.PDF_JA_MODEL ?? (kind === 'openai' ? '' : DEFAULT_MODEL);
+  const requestedKind = env.PDF_JA_PROVIDER;
+  const kind = requestedKind === 'openai' || requestedKind === 'azure' ? requestedKind : 'ollama';
+  const model = env.PDF_JA_MODEL ?? (kind === 'ollama' ? DEFAULT_MODEL : '');
   const temperature = number(env.PDF_JA_TEMPERATURE, 0.2);
   const timeoutMs = number(env.PDF_JA_REQUEST_TIMEOUT_MS, 120_000);
 
@@ -95,6 +97,16 @@ export function readSettings(
           temperature,
           timeoutMs,
         }
+      : kind === 'azure'
+        ? {
+            kind: 'azure',
+            baseUrl: normalizeAzureBaseUrl(env.PDF_JA_BASE_URL ?? ''),
+            // 鍵は環境変数から読まない。SettingsStore からだけ入る。
+            apiKey: '',
+            model,
+            temperature,
+            timeoutMs,
+          }
       : {
           kind: 'ollama',
           // ローカルのときだけ、従来どおりループバックを強制する。
@@ -138,7 +150,7 @@ export interface RunningServer {
 
 export async function startServer(settings: ServerSettings): Promise<RunningServer> {
   let provider = settings.provider;
-  if (provider.kind === 'openai') {
+  if (provider.kind !== 'ollama') {
     const apiKey = await new SettingsStore(settings.dataDir).readApiKey();
     provider = { ...provider, apiKey };
   }
@@ -276,7 +288,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 
   // 前提を先に確かめる。足りないものは「症状」と「直し方」で出す。
   let apiKey = '';
-  if (settings.provider.kind === 'openai') {
+  if (settings.provider.kind !== 'ollama') {
     try {
       apiKey = await new SettingsStore(settings.dataDir).readApiKey();
     } catch {

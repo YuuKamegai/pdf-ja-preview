@@ -122,7 +122,7 @@ async function open(context: vscode.ExtensionContext, events: SessionEvent[]): P
   // 鍵は設定ではなく SecretStorage から。config には空で入っている。
   const secret = (await context.secrets.get(SECRET_KEY)) ?? '';
   const provider: ProviderConfig =
-    config.provider.kind === 'openai'
+    config.provider.kind !== 'ollama'
       ? { ...config.provider, apiKey: secret }
       : config.provider;
 
@@ -136,7 +136,7 @@ async function open(context: vscode.ExtensionContext, events: SessionEvent[]): P
     return;
   }
 
-  if (provider.kind === 'openai') {
+  if (provider.kind !== 'ollama') {
     const text = `原文を ${describeTarget(provider)} へ送信しています。`;
     events.push({ kind: 'notice', text });
     panel.post({ kind: 'notice', text });

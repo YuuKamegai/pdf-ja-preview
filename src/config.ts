@@ -1,4 +1,4 @@
-import type { ProviderConfig } from './translate/provider';
+import { normalizeAzureBaseUrl, type ProviderConfig } from './translate/provider';
 
 export interface ResolvedConfig {
   /** apiKey は常に空。SecretStorage から後で差し込む。 */
@@ -14,7 +14,8 @@ function pick<T>(value: unknown, fallback: T, type: 'string' | 'number' | 'boole
 }
 
 export function resolveConfig(read: (key: string) => unknown): ResolvedConfig {
-  const kind = read('provider') === 'openai' ? 'openai' : 'ollama';
+  const requestedKind = read('provider');
+  const kind = requestedKind === 'openai' || requestedKind === 'azure' ? requestedKind : 'ollama';
   const model = pick(read('model'), 'qwen3.5:9b-q4_K_M', 'string');
   const temperature = pick(read('temperature'), 0.2, 'number');
   const timeoutMs = pick(read('requestTimeoutMs'), 120000, 'number');
@@ -30,6 +31,16 @@ export function resolveConfig(read: (key: string) => unknown): ResolvedConfig {
           temperature,
           timeoutMs,
         }
+      : kind === 'azure'
+        ? {
+            kind: 'azure',
+            baseUrl: normalizeAzureBaseUrl(pick(read('baseUrl'), '', 'string')),
+            // 鍵は設定から読まず、SecretStorage から後で差し込む。
+            apiKey: '',
+            model,
+            temperature,
+            timeoutMs,
+          }
       : {
           kind: 'ollama',
           endpoint: pick(read('endpoint'), 'http://127.0.0.1:11434', 'string'),

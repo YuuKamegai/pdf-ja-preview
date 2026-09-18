@@ -136,7 +136,7 @@ export class Session {
       paused: this.#paused,
       model: this.#model,
       target: describeTarget({ ...this.#provider, model: this.#model }),
-      cloud: this.#provider.kind === 'openai',
+      cloud: this.#provider.kind !== 'ollama',
       blocks: [...this.#states.values()],
     };
     if (this.#error) snapshot.error = this.#error;

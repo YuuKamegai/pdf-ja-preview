@@ -139,6 +139,27 @@ test('ローカルなら cloud は false', async (t) => {
   assert.equal(session.snapshot().target, '127.0.0.1:11434');
 });
 
+test('Azure の snapshot は cloud true で公式ホストだけを表示する', async (t) => {
+  const { session } = await setup(
+    t,
+    [block('b0', 0, 1)],
+    async () => 'ja',
+    'translation-deployment',
+    {
+      kind: 'azure',
+      baseUrl: 'https://sample.openai.azure.com/openai/v1',
+      apiKey: 'azure-key',
+      model: 'translation-deployment',
+      temperature: 0.2,
+      timeoutMs: 1000,
+    },
+  );
+  const snapshot = session.snapshot();
+  assert.equal(snapshot.cloud, true);
+  assert.equal(snapshot.target, 'sample.openai.azure.com');
+  assert.equal(JSON.stringify(snapshot).includes('azure-key'), false);
+});
+
 test('snapshot に API キーが現れない', async (t) => {
   const { session } = await setup(t, [block('b0', 0, 1)], async () => 'ja', 'gpt-test', {
     kind: 'openai',

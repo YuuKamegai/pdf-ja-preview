@@ -44,7 +44,7 @@ export interface PreflightContext {
   python: string;
   endpoint: string;
   model: string;
-  kind: 'ollama' | 'openai';
+  kind: 'ollama' | 'openai' | 'azure';
   /** 送信先のホスト名。表示にだけ使う。 */
   target: string;
 }
@@ -89,7 +89,7 @@ export function judgePreflight(facts: PreflightFacts, context: PreflightContext)
     });
   }
 
-  if (context.kind === 'openai') {
+  if (context.kind !== 'ollama') {
     const cloud = facts.cloud;
     if (cloud === undefined) {
       fatal.push({
@@ -210,11 +210,15 @@ export async function probeCloud(
   baseUrl: string,
   apiKey: string,
   timeoutMs = 5000,
+  authMode: 'bearer' | 'api-key' = 'bearer',
 ): Promise<boolean> {
   if (apiKey === '') return false;
   try {
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/models`, {
-      headers: { authorization: `Bearer ${apiKey}` },
+      headers:
+        authMode === 'api-key'
+          ? { 'api-key': apiKey }
+          : { authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(timeoutMs),
     });
     // 応答本文は読まない。鍵やアカウント情報が混ざりうる。
@@ -236,14 +240,14 @@ export interface Probes {
   assets(staticRoot: string): Promise<string[]>;
   extractor(target: ExtractorTarget): Promise<ExtractorFacts>;
   ollama(endpoint: string): Promise<{ reachable: boolean; models: string[] }>;
-  cloud(baseUrl: string, apiKey: string): Promise<boolean>;
+  cloud(baseUrl: string, apiKey: string, authMode: 'bearer' | 'api-key'): Promise<boolean>;
 }
 
 const defaultProbes: Probes = {
   assets: probeAssets,
   extractor: (target) => probeExtractor(target),
   ollama: (endpoint) => probeOllama(endpoint),
-  cloud: (baseUrl, apiKey) => probeCloud(baseUrl, apiKey),
+  cloud: (baseUrl, apiKey, authMode) => probeCloud(baseUrl, apiKey, 5000, authMode),
 };
 
 export async function preflight(
@@ -258,11 +262,15 @@ export async function preflight(
   const assets = probes.assets(settings.staticRoot);
   const extractor = probes.extractor(target);
 
-  if (settings.kind === 'openai') {
+  if (settings.kind !== 'ollama') {
     const canProbe =
       settings.cloudAllowed && settings.apiKey !== '' && settings.model.trim() !== '';
     const cloudProbe = canProbe
-      ? probes.cloud(settings.endpoint, settings.apiKey)
+      ? probes.cloud(
+          settings.endpoint,
+          settings.apiKey,
+          settings.kind === 'azure' ? 'api-key' : 'bearer',
+        )
       : Promise.resolve(false);
     const [missingAssets, extractorFacts, reachable] = await Promise.all([
       assets,

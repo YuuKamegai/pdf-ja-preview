@@ -163,6 +163,23 @@ test('URL とヘッダーを組み立てる', async () => {
   assert.equal(captured.headers?.['content-type'], 'application/json');
 });
 
+test('Azure 認証は api-key ヘッダーだけを使う', async () => {
+  const { impl, captured } = sseFetch(['data: [DONE]\n\n']);
+  await translateWithOpenAi({
+    source: 'Hello.',
+    headingContext: '',
+    config: {
+      ...config,
+      baseUrl: 'https://sample.openai.azure.com/openai/v1',
+      authMode: 'api-key',
+    },
+    signal: new AbortController().signal,
+    fetchImpl: impl,
+  });
+  assert.equal(captured.headers?.['api-key'], 'sk-test');
+  assert.equal(captured.headers?.['authorization'], undefined);
+});
+
 test('401 は認証の失敗として投げる', async () => {
   const { impl } = sseFetch([], { status: 401 });
   await assert.rejects(

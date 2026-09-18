@@ -2,7 +2,7 @@
  * OpenAI 互換の chat completions クライアント。
  *
  * OpenAI 本体・Azure OpenAI・OpenRouter・手元の互換サーバーを 1 つの実装で扱う。
- * 送信先ごとの差は baseUrl とモデル名だけに閉じ込める。
+ * 送信先ごとの差は baseUrl、モデル名、認証ヘッダーだけに閉じ込める。
  *
  * API キーはヘッダーにだけ載せる。本文・ログ・例外メッセージには出さない。
  */
@@ -21,6 +21,8 @@ export interface OpenAiConfig {
   model: string;
   temperature: number;
   timeoutMs: number;
+  /** OpenAI 本体は Bearer、Azure OpenAI v1 は api-key を使う。 */
+  authMode?: 'bearer' | 'api-key';
 }
 
 export function buildOpenAiRequestBody(
@@ -132,11 +134,15 @@ export async function translateWithOpenAi(args: {
 
   let response: Response;
   try {
+    const authHeaders: Record<string, string> =
+      config.authMode === 'api-key'
+        ? { 'api-key': config.apiKey }
+        : { authorization: `Bearer ${config.apiKey}` };
     response = await fetchImpl(url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${config.apiKey}`,
+        ...authHeaders,
       },
       body: JSON.stringify(buildOpenAiRequestBody(source, headingContext, config, systemPrompt)),
       signal: combined,

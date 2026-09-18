@@ -6,6 +6,7 @@ import {
   assertSendable,
   describeTarget,
   isLoopbackUrl,
+  normalizeAzureBaseUrl,
   translate,
   type ProviderConfig,
 } from '../../src/translate/provider';
@@ -27,6 +28,42 @@ const openai: ProviderConfig = {
   temperature: 0.2,
   timeoutMs: 1000,
 };
+
+const azure: ProviderConfig = {
+  kind: 'azure',
+  baseUrl: 'https://sample.openai.azure.com/openai/v1',
+  apiKey: 'azure-key',
+  model: 'translation-deployment',
+  temperature: 0.2,
+  timeoutMs: 1000,
+};
+
+test('Azure の公式 endpoint を v1 URL に正規化する', () => {
+  assert.equal(
+    normalizeAzureBaseUrl('https://sample.openai.azure.com'),
+    'https://sample.openai.azure.com/openai/v1',
+  );
+  assert.equal(
+    normalizeAzureBaseUrl('https://sample.services.ai.azure.com/openai/'),
+    'https://sample.services.ai.azure.com/openai/v1',
+  );
+  assert.equal(
+    normalizeAzureBaseUrl('https://sample.openai.azure.com/openai/v1/'),
+    'https://sample.openai.azure.com/openai/v1',
+  );
+});
+
+test('Azure は公式ホストと既知の v1 path 以外を拒否する', () => {
+  for (const baseUrl of [
+    'http://sample.openai.azure.com/openai/v1',
+    'https://openai.azure.com/openai/v1',
+    'https://sample.openai.azure.com.evil.example/openai/v1',
+    'https://sample.openai.azure.com/openai/deployments/x',
+    'https://sample.openai.azure.com/openai/v1?api-version=1',
+  ]) {
+    assert.throws(() => normalizeAzureBaseUrl(baseUrl), ProviderConfigError, baseUrl);
+  }
+});
 
 test('ループバックの判定', () => {
   assert.equal(isLoopbackUrl('http://127.0.0.1:11434'), true);
@@ -53,6 +90,14 @@ test('クラウドは許可がなければ拒否する', () => {
 
 test('クラウドは許可があれば通る', () => {
   assert.doesNotThrow(() => assertSendable(openai, true));
+  assert.doesNotThrow(() => assertSendable(azure, true));
+});
+
+test('Azure の非公式送信先は許可済みでも拒否する', () => {
+  assert.throws(
+    () => assertSendable({ ...azure, baseUrl: 'https://api.openai.com/v1' }, true),
+    ProviderConfigError,
+  );
 });
 
 test('真偽値でない truthy な許可を受け付けない', () => {
@@ -144,6 +189,25 @@ test('kind で実装を振り分ける', async () => {
   });
   assert.equal(result, 'openai');
   assert.deepEqual(calls, ['openai']);
+});
+
+test('Azure は正規化した URL と api-key 認証で OpenAI 実装へ回る', async () => {
+  let received: Record<string, unknown> | undefined;
+  const result = await translate({
+    source: 'Hello.',
+    headingContext: '',
+    config: { ...azure, baseUrl: 'https://sample.openai.azure.com/openai/' },
+    signal: new AbortController().signal,
+    deps: {
+      openai: async (args) => {
+        received = args.config as unknown as Record<string, unknown>;
+        return 'azure';
+      },
+    },
+  });
+  assert.equal(result, 'azure');
+  assert.equal(received?.baseUrl, 'https://sample.openai.azure.com/openai/v1');
+  assert.equal(received?.authMode, 'api-key');
 });
 
 test('ローカルは Ollama 実装へ回る', async () => {

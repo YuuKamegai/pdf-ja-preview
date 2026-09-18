@@ -99,6 +99,34 @@ test('PDF_JA_PROVIDER=openai でクラウドを選ぶ', () => {
   assert.equal(settings.model, 'gpt-test');
 });
 
+test('PDF_JA_PROVIDER=azure は公式 endpoint を正規化する', () => {
+  const settings = readSettings(
+    env({
+      PDF_JA_PROVIDER: 'azure',
+      PDF_JA_BASE_URL: 'https://sample.services.ai.azure.com/openai/',
+      PDF_JA_CLOUD_ALLOWED: '1',
+      PDF_JA_MODEL: 'translation-deployment',
+    }),
+    'C:/tmp/dist-web',
+  );
+  assert.equal(settings.provider.kind, 'azure');
+  if (settings.provider.kind !== 'azure') throw new Error('unreachable');
+  assert.equal(settings.provider.baseUrl, 'https://sample.services.ai.azure.com/openai/v1');
+  assert.equal(settings.provider.model, 'translation-deployment');
+  assert.equal(settings.cloudAllowed, true);
+});
+
+test('PDF_JA_PROVIDER=azure は非公式 endpoint を拒否する', () => {
+  assert.throws(
+    () =>
+      readSettings(
+        env({ PDF_JA_PROVIDER: 'azure', PDF_JA_BASE_URL: 'https://api.openai.com/v1' }),
+        'C:/tmp/dist-web',
+      ),
+    /Azure OpenAI/,
+  );
+});
+
 // Mutation: OpenAI の既定送信先を誤った URL に変えると失敗する。
 test('クラウドでも既定の送信先は OpenAI', () => {
   const settings = readSettings(env({ PDF_JA_PROVIDER: 'openai' }), 'C:/tmp/dist-web');

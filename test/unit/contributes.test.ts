@@ -21,3 +21,16 @@ test('コマンド実行と Markdown 表示で extension を activate する', (
     'onLanguage:markdown',
   ]);
 });
+
+test('provider 設定で Azure OpenAI を選べる', () => {
+  const pkg = JSON.parse(
+    readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+  ) as {
+    contributes: { configuration: { properties: Record<string, { enum?: string[] }> } };
+  };
+  assert.deepEqual(pkg.contributes.configuration.properties['mdJaPreview.provider']?.enum, [
+    'ollama',
+    'openai',
+    'azure',
+  ]);
+});

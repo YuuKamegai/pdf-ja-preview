@@ -278,6 +278,58 @@ test('クラウドの /models は本文を読まず応答コードだけを見�
   }
 });
 
+test('Azure の /models 探査は api-key ヘッダーだけを使う', async () => {
+  let apiKey = '';
+  let authorization = '';
+  const server = createServer((request, response) => {
+    apiKey = typeof request.headers['api-key'] === 'string' ? request.headers['api-key'] : '';
+    authorization = request.headers.authorization ?? '';
+    response.writeHead(200).end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const port = typeof address === 'object' && address !== null ? address.port : 0;
+  try {
+    assert.equal(
+      await probeCloud(`http://127.0.0.1:${port}`, 'azure-key', 2000, 'api-key'),
+      true,
+    );
+    assert.equal(apiKey, 'azure-key');
+    assert.equal(authorization, '');
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+});
+
+test('Azure モードは api-key 認証でクラウドを探査する', async () => {
+  let authMode = '';
+  const problems = await preflight(
+    {
+      staticRoot: 'C:/x/dist-web',
+      image: 'y:2',
+      python: '',
+      model: 'translation-deployment',
+      endpoint: 'https://sample.openai.azure.com/openai/v1',
+      kind: 'azure',
+      target: 'sample.openai.azure.com',
+      cloudAllowed: true,
+      apiKey: 'azure-key',
+    },
+    {
+      assets: async () => [],
+      extractor: async () => ({ kind: 'docker', daemon: true, image: true }),
+      ollama: async () => ({ reachable: true, models: [] }),
+      cloud: async (_baseUrl, _apiKey, mode) => {
+        authMode = mode;
+        return true;
+      },
+    },
+  );
+  assert.deepEqual(problems, []);
+  assert.equal(authMode, 'api-key');
+});
+
 test('Docker の探査は daemon とイメージを別々に見る', async () => {
   const calls: string[][] = [];
   const run = async (command: string, args: string[]): Promise<void> => {
