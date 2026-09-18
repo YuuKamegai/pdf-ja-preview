@@ -1,11 +1,12 @@
 # PDF 日本語プレビュー（ローカル Web アプリ）
 
-英語の PDF を、原文と日本語訳を左右に並べて読むためのローカルアプリです。文書は
-この machine から出ません。抽出も翻訳もローカルで動きます。
+英語の PDF を、原文と日本語訳を左右に並べて読むためのローカルアプリです。
+既定ではこの machine から出ません。クラウドを明示的に許可したときだけ、原文が指定した
+送信先へ出ます。抽出はローカルで動き、翻訳も既定ではローカルの Ollama を使います。
 
 - 原文は PDF.js でそのまま描画します。図も数式も元の見た目のままです。
 - 訳文は段落ごとに出します。原文の段落を押すと、対応する訳が選ばれます（逆も同じ）。
-- 翻訳はローカルの Ollama です。見ているページから順に訳します。
+- 翻訳は既定ではローカルの Ollama です。見ているページから順に訳します。
 
 ## できないこと（初期版）
 
@@ -111,6 +112,36 @@ npm run start:web
 node dist-web/server.cjs --open
 ```
 
+### クラウドの LLM を使う
+
+クラウド利用は opt-in です。API キー、明示的な送信許可、クラウド用のモデル名がすべて
+揃うまで原文を送信しません。**クラウドの既定モデル名はありません。** 使用するモデルを
+`PDF_JA_MODEL` へ明示してください。
+
+API キーは、履歴やログへ残さないため TTY（対話端末）からだけ登録できます。リダイレクトや
+pipe からの入力は拒否します。
+
+```powershell
+node dist-web/server.cjs --set-key    # 表示されない入力欄へ API キーを入力
+node dist-web/server.cjs --clear-key  # 登録した API キーを削除
+```
+
+キーは Windows の DPAPI で暗号化して保存します。復号できるのは、登録したときと同じ
+Windows ユーザー・同じ PC だけです。平文を環境変数や設定ファイルへ書かないでください。
+
+起動前に、同じ端末で次を設定します。
+
+```powershell
+$env:PDF_JA_PROVIDER = 'openai'
+$env:PDF_JA_BASE_URL = 'https://api.openai.com/v1'
+$env:PDF_JA_CLOUD_ALLOWED = '1'
+$env:PDF_JA_MODEL = '<利用するモデル名>'
+node dist-web/server.cjs
+```
+
+クラウドを使うと原文が `PDF_JA_BASE_URL` の送信先へ出ます。クラウドで動いている間は、
+画面上部に送信先ホストを常時表示します。API キー、URL のパス、query は表示しません。
+
 ### ダブルクリックで起動する
 
 デスクトップにショートカットを置けます。一度作れば、あとはそれを押すだけです。
@@ -147,7 +178,10 @@ powershell -File scripts/install-shortcut.ps1
 | 変数 | 既定 | 意味 |
 |---|---|---|
 | `PDF_JA_PORT` | `7391` | 待ち受けポート。`127.0.0.1` にだけ bind します |
-| `PDF_JA_MODEL` | `qwen3.5:9b-q4_K_M` | 既定のモデル。拡張側と同じ |
+| `PDF_JA_PROVIDER` | `ollama` | `ollama` または `openai`。クラウドは opt-in です |
+| `PDF_JA_BASE_URL` | `https://api.openai.com/v1` | `openai` のときの送信先 |
+| `PDF_JA_CLOUD_ALLOWED` | （未設定） | `1` のときだけクラウド送信を許可します |
+| `PDF_JA_MODEL` | Ollama: `qwen3.5:9b-q4_K_M` / cloud: なし | 翻訳モデル。クラウドでは必ず明示します |
 | `PDF_JA_OLLAMA_ENDPOINT` | `http://127.0.0.1:11434` | ループバック以外は拒否します |
 | `PDF_JA_DATA_DIR` | `%LOCALAPPDATA%\pdf-ja-preview` | キャッシュと一時ファイルの置き場所 |
 | `PDF_JA_EXTRACTOR_IMAGE` | `pdf-ja-extractor:1` | 抽出イメージ |
@@ -173,6 +207,7 @@ powershell -File scripts/install-shortcut.ps1
 
 ```
 %LOCALAPPDATA%\pdf-ja-preview\
+  settings.json                         DPAPI で暗号化した API キー
   docs\<文書のsha256>\document.json   抽出結果
   docs\<文書のsha256>\tr\<鍵>.json    訳文
   tmp\<サーバーID>\*.pdf              閲覧中の PDF（サーバーを閉じると消えます）

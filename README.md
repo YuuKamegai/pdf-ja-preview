@@ -9,14 +9,15 @@
 | **ローカル Web アプリ** | PDF | [docs/pdf-web.md](docs/pdf-web.md) |
 
 どちらも翻訳結果を表示するだけで、**日本語版のファイルは作りません**。原文も書き換えません。
-文書はこの machine から出ません。
+既定ではこの machine から出ません。クラウドを明示的に許可したときだけ、原文が指定した
+送信先へ出ます。
 
 ---
 
 ## VS Code 拡張（Markdown）
 
-英語の Markdown を、ローカルの Ollama で日本語へ逐次翻訳し、**別パネルに表示する**
-VS Code 拡張です。
+英語の Markdown を、既定ではローカルの Ollama で日本語へ逐次翻訳し、**別パネルに表示する**
+VS Code 拡張です。明示的に許可すれば、OpenAI 互換 API も選べます。
 
 ## 前提
 
@@ -56,8 +57,11 @@ ollama pull qwen3.5:9b-q4_K_M
 
 | 設定 | 既定値 | 説明 |
 | --- | --- | --- |
+| `mdJaPreview.provider` | `ollama` | `ollama` または `openai`。クラウドは opt-in です。 |
+| `mdJaPreview.baseUrl` | `https://api.openai.com/v1` | `openai` のときの送信先。API キーは書きません。 |
+| `mdJaPreview.cloudAllowed` | `false` | 原文を外部へ送ることを明示的に許可します。 |
 | `mdJaPreview.endpoint` | `http://127.0.0.1:11434` | Ollama のベース URL。 |
-| `mdJaPreview.model` | `qwen3.5:9b-q4_K_M` | 翻訳に使う Ollama のモデル名。 |
+| `mdJaPreview.model` | `qwen3.5:9b-q4_K_M` | 翻訳モデル。既定値は Ollama 用です。クラウド用の既定モデル名は無いため、利用者が明示指定します。 |
 | `mdJaPreview.think` | `false` | thinking を有効にする。有効にすると推論文が訳文へ混ざることがある。 |
 | `mdJaPreview.temperature` | `0.2` | 生成温度。 |
 | `mdJaPreview.requestTimeoutMs` | `120000` | 1 ブロックあたりのタイムアウト（ミリ秒）。 |
@@ -65,12 +69,18 @@ ollama pull qwen3.5:9b-q4_K_M
 | `mdJaPreview.scrollSync` | `true` | 原文エディタと訳文パネルのスクロールを同期する。 |
 | `mdJaPreview.autoOpen` | `false` | Markdown を開いたとき自動で日本語プレビューを開く。 |
 
+クラウドを使うには `provider`、`baseUrl`、`cloudAllowed`、`model` を確認してください。
+API キーはコマンド **`md-ja: API キーを登録`** で登録します。設定ファイルには書きません。
+キーは VS Code の `SecretStorage` に保存されます。クラウドで動いている間は、原文の送信先
+ホストがプレビュー上部に常時表示されます。
+
 ---
 
 ## PDF 日本語プレビュー（ローカル Web アプリ）
 
 英語の PDF を、原文と日本語訳を左右に並べて読むためのローカルアプリです。原文は PDF.js で
-そのまま描画し、段落ごとに訳を対応づけます。抽出は Docling（コンテナ）、翻訳は Ollama です。
+そのまま描画し、段落ごとに訳を対応づけます。抽出は Docling（コンテナ）、翻訳は既定では
+Ollama です。明示的に許可すれば OpenAI 互換 API も選べます。
 
 セットアップ・起動・制約・保存先・復旧方法は **[docs/pdf-web.md](docs/pdf-web.md)** を
 読んでください。実文書での検証結果は
