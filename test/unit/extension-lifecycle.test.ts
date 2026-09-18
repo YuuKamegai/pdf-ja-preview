@@ -93,7 +93,13 @@ before(async () => {
         build.onResolve({ filter: /\/panel\/panel$/ }, () => ({ path: 'panel', namespace: 'fake' }));
         build.onResolve({ filter: /\/session$/ }, () => ({ path: 'session', namespace: 'fake' }));
         build.onResolve({ filter: /\/translate\/queue$/ }, () => ({ path: 'queue', namespace: 'fake' }));
-        build.onResolve({ filter: /\/translate\/ollama$/ }, () => ({ path: 'ollama', namespace: 'fake' }));
+        // extension.ts は './translate/provider' だけを import するが、provider.ts 自身が
+        // './ollama' / './openai' を import する。extension.ts からの import 経路を広く
+        // 塞いでおくことで、provider.ts の実装ごとバンドルへ入れない（実 fetch を持ち込ませない）。
+        build.onResolve(
+          { filter: /\/translate\/(ollama|openai|provider)$/ },
+          () => ({ path: 'provider', namespace: 'fake' }),
+        );
         build.onResolve({ filter: /\/markdown\/render$/ }, () => ({ path: 'render', namespace: 'fake' }));
         build.onLoad({ filter: /.*/, namespace: 'fake' }, (args) => ({ contents: mocks[args.path] }));
       },
@@ -150,7 +156,53 @@ const mocks: Record<string, string> = {
   panel: `exports.PreviewPanel = class { static create() { const p = new globalThis.__mdJaFakePanel(); globalThis.__mdJaHarness.panels.push(p); return p; } };`,
   session: `exports.TranslationSession = globalThis.__mdJaFakeSession;`,
   queue: `exports.SequentialQueue = class { cancelAll() { this.cancelled = true; } enqueue(job) { return job(new AbortController().signal); } };`,
-  ollama: `exports.translateBlock = async () => '';`,
+  // './translate/ollama' / './translate/openai' / './translate/provider' はすべてここへ
+  // 差し替わる。assertSendable / describeTarget は実装と同じ判定をここで再現し（session
+  // 生成前のゲートという既存の挙動を壊さないため）、translate() だけは「呼ばれたら大きな
+  // 音を立てて落ちる」ようにする。FakeSession は deps.translate を呼ばない設計なので、
+  // 呼ばれたらそれ自体が回帰のサインになる。
+  provider: `
+    function isLoopbackUrl(raw) {
+      var url;
+      try { url = new URL(raw); } catch (e) { return false; }
+      var host = url.hostname.replace(/^\\[|\\]$/g, '');
+      return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    }
+    exports.assertSendable = function (config, cloudAllowed) {
+      if (config.kind === 'ollama') {
+        if (!isLoopbackUrl(config.endpoint)) {
+          throw new Error('Ollama の endpoint はループバックだけです: ' + config.endpoint);
+        }
+        return;
+      }
+      var url;
+      try { url = new URL(config.baseUrl); } catch (e) {
+        throw new Error('送信先が URL ではありません: ' + config.baseUrl);
+      }
+      if (url.protocol !== 'https:' && !isLoopbackUrl(config.baseUrl)) {
+        throw new Error('クラウドの送信先は https だけです: ' + url.host);
+      }
+      if (cloudAllowed !== true) {
+        throw new Error('原文を ' + url.host + ' へ送る許可がありません。');
+      }
+      if (!config.apiKey || config.apiKey.trim() === '') {
+        throw new Error('API キーが登録されていません。');
+      }
+      if (!config.model || config.model.trim() === '') {
+        throw new Error('クラウドで使うモデル名を設定してください。');
+      }
+    };
+    exports.describeTarget = function (config) {
+      var raw = config.kind === 'ollama' ? config.endpoint : config.baseUrl;
+      try { return new URL(raw).host; } catch (e) { return '(不正な URL)'; }
+    };
+    exports.translate = async function () {
+      throw new Error(
+        'translate() は extension-lifecycle.test.ts では呼ばれてはいけません（session は FakeSession に差し替わっているため）。' +
+        'このエラーが出た場合、FakeSession が deps.translate を呼ぶよう変更された可能性があります。',
+      );
+    };
+  `,
   render: `exports.renderMarkdown = value => value;`,
 };
 
