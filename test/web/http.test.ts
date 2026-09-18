@@ -92,7 +92,7 @@ async function startServer(
     documents,
     storage,
     scheduler,
-    connection: { endpoint: 'http://127.0.0.1:11434', think: false, temperature: 0.2, timeoutMs: 1000 },
+    connection: { kind: 'ollama', endpoint: 'http://127.0.0.1:11434', think: false, temperature: 0.2, timeoutMs: 1000 },
     defaultModel: 'm1',
     staticRoot,
     security: { token, allowedHosts },

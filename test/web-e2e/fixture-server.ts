@@ -78,7 +78,7 @@ async function main(): Promise<void> {
     documents,
     storage,
     scheduler,
-    connection: { endpoint: 'http://127.0.0.1:11434', think: false, temperature: 0.2, timeoutMs: 5000 },
+    connection: { kind: 'ollama', endpoint: 'http://127.0.0.1:11434', think: false, temperature: 0.2, timeoutMs: 5000 },
     defaultModel: 'fixture-model',
     staticRoot: join(root, 'dist-web'),
     security: { token: createToken(), allowedHosts },

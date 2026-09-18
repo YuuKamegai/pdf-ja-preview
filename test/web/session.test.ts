@@ -48,7 +48,7 @@ test('保存待ち中のモデル変更で旧訳を新しい世代へ公開し�
   assert.equal(events.some(e => e.type === 'block' && e.generation === generation && e.value.ja === 'OLD'), false);
 });
 
-const connection = { endpoint: 'http://127.0.0.1:11434', think: false, temperature: 0.2, timeoutMs: 1000 };
+const connection = { kind: 'ollama' as const, endpoint: 'http://127.0.0.1:11434', think: false, temperature: 0.2, timeoutMs: 1000 };
 
 function block(id: string, order: number, page: number, overrides: Partial<PdfBlock> = {}): PdfBlock {
   return {

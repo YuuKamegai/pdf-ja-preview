@@ -7,7 +7,7 @@
 
 import { createHash } from 'node:crypto';
 
-import type { OllamaConfig } from '../../src/translate/ollama';
+import type { ProviderConfig } from '../../src/translate/provider';
 import type { PdfBlock, PdfDocument, TranslationState } from '../shared/document';
 import type { ServerEvent, Snapshot } from '../shared/protocol';
 import { Scheduler } from './scheduler';
@@ -30,9 +30,12 @@ export type SessionListener = (event: ServerEvent) => void;
 
 export type TranslateFn = (
   block: PdfBlock,
-  config: OllamaConfig,
+  config: ProviderConfig,
   signal: AbortSignal,
 ) => Promise<string>;
+
+type OmitModel<Config> = Config extends ProviderConfig ? Omit<Config, 'model'> : never;
+export type ProviderConnection = OmitModel<ProviderConfig>;
 
 export interface SessionOptions {
   sessionId: string;
@@ -42,8 +45,8 @@ export interface SessionOptions {
   model: string;
   storage: Storage;
   scheduler: Scheduler;
-  /** model 以外の接続設定。model はセッションが持つ。 */
-  connection: Omit<OllamaConfig, 'model'>;
+  /** model はセッションの値で差し替える。 */
+  connection: ProviderConnection;
   translate?: TranslateFn;
 }
 
@@ -77,7 +80,7 @@ export class Session {
   #model: string;
   #storage: Storage;
   #scheduler: Scheduler;
-  #connection: Omit<OllamaConfig, 'model'>;
+  #provider: ProviderConnection;
   #translate: TranslateFn;
 
   #generation = 0;
@@ -96,7 +99,7 @@ export class Session {
     this.#model = options.model;
     this.#storage = options.storage;
     this.#scheduler = options.scheduler;
-    this.#connection = options.connection;
+    this.#provider = options.connection;
     this.#translate = options.translate ?? translatePdfBlock;
 
     for (const block of this.#document.blocks) {
@@ -248,8 +251,8 @@ export class Session {
       source: block.source,
       headingContext: block.headingContext,
       model: this.#model,
-      think: this.#connection.think,
-      temperature: this.#connection.temperature,
+      think: this.#provider.kind === 'ollama' && this.#provider.think,
+      temperature: this.#provider.temperature,
       promptVersion: PDF_PROMPT_VERSION,
       verifierVersion: PDF_VERIFIER_VERSION,
     });
@@ -288,7 +291,7 @@ export class Session {
       try {
         const ja = await this.#translate(
           block,
-          { ...this.#connection, model: this.#model },
+          { ...this.#provider, model: this.#model },
           signal,
         );
         // 世代が変わった後に返ってきた結果は、表示にもキャッシュにも入れない。

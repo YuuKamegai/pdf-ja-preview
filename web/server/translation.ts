@@ -8,7 +8,7 @@
  * 自動で見分けられない数式・識別子は品質保証の対象外。`docs/pdf-web.md` に明記する。
  */
 
-import { translateBlock, type OllamaConfig } from '../../src/translate/ollama';
+import { translate, type ProviderConfig } from '../../src/translate/provider';
 import type { PdfBlock } from '../shared/document';
 
 /** プロンプトを変えたら上げる。訳文キャッシュの鍵に入る。 */
@@ -310,7 +310,7 @@ export function splitIntoChunks(source: string, maxChars: number = MAX_CHUNK_CHA
 }
 
 export interface TranslateDeps {
-  translate?: typeof translateBlock;
+  translate?: typeof translate;
 }
 
 /**
@@ -320,7 +320,7 @@ export interface TranslateDeps {
  */
 export async function translatePdfBlock(
   block: PdfBlock,
-  config: OllamaConfig,
+  config: ProviderConfig,
   signal: AbortSignal,
   deps: TranslateDeps = {},
 ): Promise<string> {
@@ -328,7 +328,7 @@ export async function translatePdfBlock(
     throw new TranslationError('not-translatable', 'このブロックは翻訳対象ではありません');
   }
 
-  const translate = deps.translate ?? translateBlock;
+  const translateImpl = deps.translate ?? translate;
   const chunks = splitIntoChunks(block.source);
   const results: string[] = [];
 
@@ -344,7 +344,7 @@ export async function translatePdfBlock(
     }
 
     const { text, tokens } = protectSource(core);
-    const raw = await translate({
+    const raw = await translateImpl({
       source: text,
       headingContext: block.headingContext,
       config,

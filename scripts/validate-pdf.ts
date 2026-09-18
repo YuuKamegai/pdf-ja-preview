@@ -118,7 +118,7 @@ async function main(): Promise<number> {
     model,
     storage,
     scheduler,
-    connection: { endpoint, think: false, temperature: 0.2, timeoutMs: 180_000 },
+    connection: { kind: 'ollama', endpoint, think: false, temperature: 0.2, timeoutMs: 180_000 },
     translate: translatePdfBlock,
   });
 

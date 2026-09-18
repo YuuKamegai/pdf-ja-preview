@@ -12,7 +12,6 @@ import { extname, join, normalize, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 
-import type { OllamaConfig } from '../../src/translate/ollama';
 import {
   MAX_JSON_BYTES,
   parseCreateSessionRequest,
@@ -30,7 +29,7 @@ import {
   TOKEN_HEADER,
   type SecurityConfig,
 } from './security';
-import { Session, type TranslateFn } from './session';
+import { Session, type ProviderConnection, type TranslateFn } from './session';
 import { Storage } from './storage';
 
 /** SSE の生存確認。 */
@@ -42,8 +41,8 @@ export interface AppDeps {
   documents: DocumentStore;
   storage: Storage;
   scheduler: Scheduler;
-  /** model 以外の接続設定。model はセッションごとに決める。 */
-  connection: Omit<OllamaConfig, 'model'>;
+  /** model はセッションごとの値で差し替える。 */
+  connection: ProviderConnection;
   defaultModel: string;
   /** 静的ファイルの置き場所。ここから外へは出さない。 */
   staticRoot: string;

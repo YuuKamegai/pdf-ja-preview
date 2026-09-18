@@ -10,7 +10,11 @@ import type { Server } from 'node:http';
 import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
 
-import type { OllamaConfig } from '../../src/translate/ollama';
+import {
+  assertSendable,
+  describeTarget,
+  type ProviderConfig,
+} from '../../src/translate/provider';
 import { DocumentStore } from './documents';
 import {
   DEFAULT_EXTRACTION_TIMEOUT_MS,
@@ -28,13 +32,16 @@ import { Storage, defaultDataDir } from './storage';
 export const DEFAULT_PORT = 7391;
 export const DEFAULT_MODEL = 'qwen3.5:9b-q4_K_M';
 export const DEFAULT_IMAGE = 'pdf-ja-extractor:1';
+export const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 
 export interface ServerSettings {
   port: number;
   dataDir: string;
   staticRoot: string;
   model: string;
-  connection: Omit<OllamaConfig, 'model'>;
+  /** apiKey は空。起動時に SettingsStore から差し込む。 */
+  provider: ProviderConfig;
+  cloudAllowed: boolean;
   extractorKind: 'docker' | 'python';
   image: string;
   python: string;
@@ -71,21 +78,42 @@ export function readSettings(
   env: NodeJS.ProcessEnv = process.env,
   defaultStaticRoot = join(process.cwd(), 'dist-web'),
 ): ServerSettings {
-  const endpoint = assertLoopback(env.PDF_JA_OLLAMA_ENDPOINT ?? 'http://127.0.0.1:11434');
   const python = env.PDF_JA_PYTHON ?? '';
+  const kind = env.PDF_JA_PROVIDER === 'openai' ? 'openai' : 'ollama';
+  const model = env.PDF_JA_MODEL ?? (kind === 'openai' ? '' : DEFAULT_MODEL);
+  const temperature = number(env.PDF_JA_TEMPERATURE, 0.2);
+  const timeoutMs = number(env.PDF_JA_REQUEST_TIMEOUT_MS, 120_000);
+
+  const provider: ProviderConfig =
+    kind === 'openai'
+      ? {
+          kind: 'openai',
+          baseUrl: env.PDF_JA_BASE_URL ?? DEFAULT_BASE_URL,
+          // 鍵は環境変数から読まない。SettingsStore からだけ入る。
+          apiKey: '',
+          model,
+          temperature,
+          timeoutMs,
+        }
+      : {
+          kind: 'ollama',
+          // ローカルのときだけ、従来どおりループバックを強制する。
+          endpoint: assertLoopback(
+            env.PDF_JA_OLLAMA_ENDPOINT ?? 'http://127.0.0.1:11434',
+          ),
+          model,
+          think: env.PDF_JA_THINK === '1',
+          temperature,
+          timeoutMs,
+        };
 
   return {
     port: number(env.PDF_JA_PORT, DEFAULT_PORT),
     dataDir: defaultDataDir(env),
     staticRoot: resolve(env.PDF_JA_STATIC_ROOT ?? defaultStaticRoot),
-    // 既定モデルは既存の拡張と同じ。
-    model: env.PDF_JA_MODEL ?? DEFAULT_MODEL,
-    connection: {
-      endpoint,
-      think: env.PDF_JA_THINK === '1',
-      temperature: number(env.PDF_JA_TEMPERATURE, 0.2),
-      timeoutMs: number(env.PDF_JA_REQUEST_TIMEOUT_MS, 120_000),
-    },
+    model,
+    provider,
+    cloudAllowed: env.PDF_JA_CLOUD_ALLOWED === '1',
     extractorKind: python === '' ? 'docker' : 'python',
     image: env.PDF_JA_EXTRACTOR_IMAGE ?? DEFAULT_IMAGE,
     python,
@@ -109,6 +137,13 @@ export interface RunningServer {
 }
 
 export async function startServer(settings: ServerSettings): Promise<RunningServer> {
+  let provider = settings.provider;
+  if (provider.kind === 'openai') {
+    const apiKey = await new SettingsStore(settings.dataDir).readApiKey();
+    provider = { ...provider, apiKey };
+  }
+  assertSendable(provider, settings.cloudAllowed);
+
   const storage = new Storage(settings.dataDir);
   await storage.initialize();
 
@@ -125,7 +160,7 @@ export async function startServer(settings: ServerSettings): Promise<RunningServ
     documents,
     storage,
     scheduler,
-    connection: settings.connection,
+    connection: provider,
     defaultModel: settings.model,
     staticRoot: settings.staticRoot,
     security: { token, allowedHosts },
@@ -244,7 +279,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     staticRoot: settings.staticRoot,
     image: settings.image,
     python: settings.python,
-    endpoint: settings.connection.endpoint,
+    endpoint:
+      settings.provider.kind === 'ollama'
+        ? settings.provider.endpoint
+        : settings.provider.baseUrl,
     model: settings.model,
   });
   for (const line of formatProblems(problems)) console.log(line);
@@ -268,7 +306,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   console.log(`  保存先  : ${settings.dataDir}`);
   console.log(`  配信元  : ${settings.staticRoot}`);
   console.log(`  抽出    : ${settings.extractorKind === 'docker' ? settings.image : settings.python}`);
-  console.log(`  Ollama  : ${settings.connection.endpoint} (${settings.model})`);
+  console.log(`  翻訳先  : ${describeTarget(settings.provider)} (${settings.model})`);
   console.log(`  終了    : ${launcher ? 'この窓を閉じる（または Ctrl+C）' : 'Ctrl+C'}`);
 
   if (argv.includes('--open')) openBrowser(running.url);

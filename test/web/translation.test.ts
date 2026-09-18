@@ -12,10 +12,11 @@ import {
   translatePdfBlock,
   verifyTranslation,
 } from '../../web/server/translation';
-import type { OllamaConfig } from '../../src/translate/ollama';
+import type { ProviderConfig } from '../../src/translate/provider';
 import type { PdfBlock } from '../../web/shared/document';
 
-const config: OllamaConfig = {
+const config: ProviderConfig = {
+  kind: 'ollama',
   endpoint: 'http://127.0.0.1:11434',
   model: 'test-model',
   think: false,
