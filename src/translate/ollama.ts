@@ -1,25 +1,17 @@
+import { ModelMissingError, ProviderUnavailableError } from './errors';
+
+// 旧名は同一クラスの別名。src/session.ts と test/unit/ が instanceof で見ている。
+export {
+  ProviderUnavailableError as OllamaUnavailableError,
+  ModelMissingError as OllamaModelMissingError,
+};
+
 export interface OllamaConfig {
   endpoint: string;
   model: string;
   think: boolean;
   temperature: number;
   timeoutMs: number;
-}
-
-export class OllamaUnavailableError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-    this.name = 'OllamaUnavailableError';
-  }
-}
-
-export class OllamaModelMissingError extends Error {
-  readonly model: string;
-  constructor(model: string) {
-    super(`モデルが見つかりません: ${model}`);
-    this.name = 'OllamaModelMissingError';
-    this.model = model;
-  }
 }
 
 export const SYSTEM_PROMPT = [
@@ -79,7 +71,7 @@ function abortFailure(
 ): unknown | undefined {
   if (signal.aborted) return cause;
   if (timeout.aborted) {
-    return new OllamaUnavailableError(`Ollama の応答が ${timeoutMs}ms を超えました`, { cause });
+    return new ProviderUnavailableError(`Ollama の応答が ${timeoutMs}ms を超えました`, { cause });
   }
   return undefined;
 }
@@ -112,14 +104,14 @@ export async function translateBlock(args: {
   } catch (cause) {
     const aborted = abortFailure(cause, signal, timeout, config.timeoutMs);
     if (aborted !== undefined) throw aborted;
-    throw new OllamaUnavailableError(`Ollama へ接続できません: ${config.endpoint}`, { cause });
+    throw new ProviderUnavailableError(`Ollama へ接続できません: ${config.endpoint}`, { cause });
   }
 
-  if (response.status === 404) throw new OllamaModelMissingError(config.model);
+  if (response.status === 404) throw new ModelMissingError(config.model);
   if (!response.ok) {
-    throw new OllamaUnavailableError(`Ollama が HTTP ${response.status} を返しました`);
+    throw new ProviderUnavailableError(`Ollama が HTTP ${response.status} を返しました`);
   }
-  if (!response.body) throw new OllamaUnavailableError('Ollama の応答本文が空です');
+  if (!response.body) throw new ProviderUnavailableError('Ollama の応答本文が空です');
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -130,7 +122,7 @@ export async function translateBlock(args: {
     const trimmed = line.trim();
     if (trimmed === '') return;
     const parsed = JSON.parse(trimmed) as ChatChunk;
-    if (parsed.error) throw new OllamaUnavailableError(`Ollama エラー: ${parsed.error}`);
+    if (parsed.error) throw new ProviderUnavailableError(`Ollama エラー: ${parsed.error}`);
     const content = parsed.message?.content ?? '';
     if (content !== '') {
       text += content;
